@@ -52,8 +52,13 @@ header h1 {
 .reset-button-bottom {
   position: static;
   display: block;
-  margin: 0.5rem auto 2rem;
+  margin: 1rem auto 2rem;
+  padding: 0.65rem 1.4rem;
+  font-size: 0.9rem;
+  border-color: var(--moss);
+  color: var(--moss-dark);
 }
+.reset-button-bottom:hover { background: #eef4ef; color: var(--moss-dark); border-color: var(--moss); }
 .subtitle {
   margin: 0;
   color: #5b6259;
@@ -407,3 +412,14 @@ textarea {
 .diagram-primer.diagram-forward { background: #e4efe6; color: var(--moss-dark); font-weight: 600; }
 .diagram-primer.diagram-reverse { background: #fdeee0; color: var(--amber); font-weight: 600; }
 .diagram-gap { background: var(--paper); color: #5b6259; border: 1px solid var(--line); }
+
+.secondary-match-warning {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  background: #f6dfd9;
+  border: 1px solid #e3b5a8;
+  border-radius: 3px;
+  font-size: 0.82rem;
+  color: #7a3324;
+}
+.secondary-match-warning .detail-list { margin: 0.3rem 0 0; }

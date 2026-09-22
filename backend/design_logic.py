@@ -39,6 +39,10 @@ GC_WINDOW_LOW = 30.0
 OVERALL_GC_LOW = 25.0
 OVERALL_GC_HIGH = 75.0
 
+# IDT's documented size range for a single gBlocks Gene Fragment order.
+IDT_MIN_GBLOCK_LENGTH = 125
+IDT_MAX_GBLOCK_LENGTH = 3000
+
 VALID_DIRECTIONS = {"forward", "reverse"}
 
 
@@ -181,10 +185,40 @@ class GBlockDesign:
 
 
 def design_gblock(primers: list, gaps: list, gc_percent: float, flank_length: int = 30) -> dict:
+    core_length = sum(len(p["sequence"]) for p in primers) + sum(gaps)
+
+    # IDT's gBlocks Gene Fragments must be 125-3000bp. If the design would
+    # otherwise come out under 125bp, grow the flanks (equally on both
+    # ends) just enough to reach the minimum, rather than handing back
+    # something IDT won't actually accept.
+    flank_length_note = None
+    total_length = core_length + 2 * flank_length
+    if total_length < IDT_MIN_GBLOCK_LENGTH:
+        shortfall = IDT_MIN_GBLOCK_LENGTH - total_length
+        increase_per_side = -(-shortfall // 2)  # ceiling division - never land under the minimum
+        original_flank_length = flank_length
+        flank_length = flank_length + increase_per_side
+        total_length = core_length + 2 * flank_length
+        flank_length_note = (
+            f"Your design came out at {core_length + 2 * original_flank_length}bp, under IDT's "
+            f"{IDT_MIN_GBLOCK_LENGTH}bp minimum for gBlocks Gene Fragments, so the flank length was "
+            f"increased from {original_flank_length}bp to {flank_length}bp on each side to reach {total_length}bp."
+        )
+
+    if total_length > IDT_MAX_GBLOCK_LENGTH:
+        raise ValueError(
+            f"This design comes out to {total_length}bp, which is over IDT's {IDT_MAX_GBLOCK_LENGTH}bp "
+            f"maximum for a single gBlocks Gene Fragment. Shorten your fragment lengths, use fewer "
+            f"primers, or reduce the flank length to bring it under {IDT_MAX_GBLOCK_LENGTH}bp."
+        )
+
     design = GBlockDesign(
         primers=primers,
         gaps=gaps,
         target_gc_percent=gc_percent,
         flank_length=flank_length,
     ).build()
-    return design.summary()
+    result = design.summary()
+    if flank_length_note:
+        result["flank_length_note"] = flank_length_note
+    return result

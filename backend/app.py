@@ -348,7 +348,10 @@ def api_design_fix():
     # Gap lengths only depend on primer lengths and your fragment lengths -
     # not on the random sequence content - so they're fixed for every retry;
     # only the random flanks/infills get re-rolled each attempt.
-    result = refine.find_clean_design(primers, gaps, gc_percent, flank_length)
+    try:
+        result = refine.find_clean_design(primers, gaps, gc_percent, flank_length)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     result["design"]["gc_percent_source"] = gc_percent_source
     result["design"]["degenerate_info"] = degenerate_info
     gap_i = 0

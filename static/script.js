@@ -279,6 +279,15 @@ $("design-form").addEventListener("submit", async (e) => {
   }
 });
 
+let activeBlastPollInterval = null;
+
+function cancelActiveBlastPoll() {
+  if (activeBlastPollInterval) {
+    clearInterval(activeBlastPollInterval);
+    activeBlastPollInterval = null;
+  }
+}
+
 async function submitDesign(endpoint) {
   try {
     const res = await fetch(endpoint, {
@@ -289,14 +298,30 @@ async function submitDesign(endpoint) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Design failed");
 
-    currentDesign = endpoint.endsWith("/fix") ? data.design : data;
+    const isFreshDesign = !endpoint.endsWith("/fix");
+    currentDesign = isFreshDesign ? data : data.design;
     renderDesign(currentDesign);
     show($("design-result"));
     show($("alignment-panel"));
     show($("blast-panel"));
     show($("idt-panel"));
+
+    // Any previous results downstream of this one no longer apply to the
+    // (possibly new) sequence - clear them out rather than leaving stale
+    // results on screen next to a design they no longer describe.
+    cancelActiveBlastPoll();
     hide($("alignment-result"));
+    $("alignment-result").innerHTML = "";
     hide($("blast-result"));
+    $("blast-result").innerHTML = "";
+    if (isFreshDesign) {
+      hide($("complexity-result"));
+      $("complexity-result").innerHTML = "";
+      hide($("fix-issues"));
+      hide($("fix-status"));
+      $("fix-status").innerHTML = "";
+    }
+
     return data;
   } catch (err) {
     $("design-result").innerHTML = `<span class="badge error">Error</span> ${escapeHtml(err.message)}`;
@@ -403,6 +428,14 @@ function renderAlignment(results) {
       ? `<div class="degeneracy-note">${r.substitution_notes.map(escapeHtml).join("<br>")}</div>`
       : "";
 
+    const secondaryWarning = (r.secondary_matches && r.secondary_matches.length)
+      ? `<div class="secondary-match-warning">
+          <strong>&#9888; Possible off-target binding:</strong> this primer could also plausibly bind elsewhere in the gBlock, not just where it's meant to:
+          <ul class="detail-list">${r.secondary_matches.map((m) =>
+            `<li>Position ${m.start}&ndash;${m.end}: ${m.percent_identity}% identity (${m.mismatches} mismatch${m.mismatches === 1 ? "" : "es"})</li>`).join("")}</ul>
+        </div>`
+      : "";
+
     return `
       <div class="hit-row">
         <strong>${escapeHtml(r.primer_label)}</strong>
@@ -413,6 +446,7 @@ function renderAlignment(results) {
 ${barLine}
 ${primerLine}</pre>
         ${substitutionNotes}
+        ${secondaryWarning}
       </div>`;
   }).join("");
 
@@ -458,10 +492,12 @@ function pollBlast(jobId) {
 
         if (job.status === "done") {
           clearInterval(interval);
+          activeBlastPollInterval = null;
           renderBlast(job);
           resolve();
         } else if (job.status === "error") {
           clearInterval(interval);
+          activeBlastPollInterval = null;
           $("blast-result").innerHTML = `<span class="badge error">BLAST error</span> ${escapeHtml(job.error)}`;
           resolve();
         } else {
@@ -474,9 +510,11 @@ function pollBlast(jobId) {
         }
       } catch (err) {
         clearInterval(interval);
+        activeBlastPollInterval = null;
         reject(err);
       }
     }, 4000);
+    activeBlastPollInterval = interval;
   });
 }
 
