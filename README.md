@@ -5,6 +5,8 @@
 3. **Runs a BLAST search** against NCBI's database, to see if your new sequence accidentally matches something that already exists.
 4. **Runs a local complexity check** based on the criteria laid out in IDT's ordering tool. 
 
+https://gblockdesigner.onrender.com/
+
 ## How the sequence is generated: 
 
 Start by entering your **primer** name (e.g. "F1"), direction (Forward/Reverse), and its sequence for all primers. 
