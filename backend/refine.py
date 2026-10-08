@@ -24,6 +24,7 @@ quietly failing.
 
 import design_logic
 import complexity_check
+import probe_placement
 
 DEFAULT_MAX_ATTEMPTS = 30
 REDUCED_ATTEMPTS_WHEN_STRUCTURALLY_LIMITED = 6
@@ -85,7 +86,7 @@ def diagnose_structural_limits(gc_percent: float) -> list:
 
 
 def find_clean_design(primers: list, gaps: list, gc_percent: float, flank_length: int = 30,
-                       max_attempts=None) -> dict:
+                       max_attempts=None, probe_config: dict = None, gap_sources: list = None) -> dict:
     structural_notes = diagnose_structural_limits(gc_percent)
 
     if max_attempts is None:
@@ -97,6 +98,21 @@ def find_clean_design(primers: list, gaps: list, gc_percent: float, flank_length
 
     for attempt in range(1, max_attempts + 1):
         design = design_logic.design_gblock(primers, gaps, gc_percent, flank_length)
+
+        # Label each gap's source (computed / nested / sequential) BEFORE
+        # any probe is inserted, since inserting a probe can split one gap
+        # segment into two - the pieces inherit this label from
+        # probe_placement, but only if it's already there to inherit.
+        if gap_sources is not None:
+            gap_i = 0
+            for segment in design["segments"]:
+                if segment["type"] == "gap":
+                    segment["source"] = gap_sources[gap_i]
+                    gap_i += 1
+
+        if probe_config:
+            design = probe_placement.insert_probe(design, **probe_config)
+
         report = complexity_check.run_local_complexity_check(design["sequence"])
         flag_count = _count_flags(report)
 

@@ -423,3 +423,27 @@ textarea {
   color: #7a3324;
 }
 .secondary-match-warning .detail-list { margin: 0.3rem 0 0; }
+
+/* ---------- Probe ---------- */
+
+#probe-fields {
+  margin-top: 0.6rem;
+  padding: 0.9rem 1rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+#probe_pair_select {
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  padding: 0.5rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ink);
+}
+.tag-probe { background: #e6e0f5; color: #5a3fa0; }
+.diagram-probe { background: #e6e0f5; color: #5a3fa0; font-weight: 600; }

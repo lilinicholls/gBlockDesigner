@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>gBlock Designer</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_version }}">
 </head>
 <body>
   <header>
@@ -33,6 +33,29 @@
         <p class="hint">Each pair needs a forward and a reverse primer (picked from the list above) and a fragment length: the length of sequence strictly <em>between</em> that pair's own two primers (not counting those two primers themselves &mdash; though it does count any other primer that happens to sit in between). Gaps between primers are worked out automatically from these.</p>
         <div id="pair-rows"></div>
         <button type="button" id="add-pair-row" class="tertiary-button">+ Add another pair</button>
+
+        <h3 class="subsection-title">Probe (optional)</h3>
+        <label class="checkbox-label">
+          <input type="checkbox" id="add_probe_checkbox">
+          Add a probe
+        </label>
+        <div id="probe-fields" class="hidden">
+          <p class="hint">The probe is inserted exactly as typed (plain A/C/G/T only, no degenerate codes) at a specific spot within one primer pair's region. "Start position" counts from right after that pair's forward primer ends &mdash; leave it blank to center the probe automatically.</p>
+          <div class="row">
+            <label>
+              For primer pair
+              <select id="probe_pair_select"></select>
+            </label>
+            <label>
+              Start position, bp (optional)
+              <input type="number" id="probe_start_position" min="0" placeholder="Auto-center">
+            </label>
+          </div>
+          <label>
+            Probe sequence (5'&rarr;3')
+            <input type="text" id="probe_sequence" placeholder="ACGT only, no degenerate codes">
+          </label>
+        </div>
 
         <div class="row">
           <label>
@@ -108,6 +131,6 @@
     <button type="button" class="reset-button reset-button-bottom" id="reset-bottom">Design new gBlock</button>
   </main>
 
-  <script src="{{ url_for('static', filename='script.js') }}"></script>
+  <script src="{{ url_for('static', filename='script.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>

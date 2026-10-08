@@ -15,6 +15,7 @@ import complexity_check  # noqa: E402
 import refine  # noqa: E402
 import layout_solver  # noqa: E402
 import iupac  # noqa: E402
+import probe_placement  # noqa: E402
 
 app = Flask(
     __name__,
@@ -29,7 +30,15 @@ app = Flask(
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    # Ties a version number to each static file's own last-modified time,
+    # so browsers always fetch the current version after a deploy instead
+    # of quietly reusing a cached copy of an old script.js or style.css.
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+    asset_version = int(max(
+        os.path.getmtime(os.path.join(static_dir, "script.js")),
+        os.path.getmtime(os.path.join(static_dir, "style.css")),
+    ))
+    return render_template("index.html", asset_version=asset_version)
 
 
 def _parse_primers_and_pairs(data):
@@ -246,6 +255,7 @@ def api_design():
     try:
         primers, gaps, flank_length, gap_sources, degenerate_info = _parse_primers_and_pairs(data)
         gc_percent, gc_percent_source = _resolve_gc_percent(data)
+        probe_config = _parse_probe(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -258,14 +268,65 @@ def api_design():
     result["degenerate_info"] = degenerate_info
     # Attach a "source" (computed / nested / sequential) to each gap segment,
     # so the UI can be upfront about which gaps were pinned down exactly by
-    # your fragment lengths versus estimated.
+    # your fragment lengths versus estimated. This has to happen BEFORE any
+    # probe is inserted, since inserting a probe can split one gap segment
+    # into two - the split pieces inherit this same label from probe_placement.
     gap_i = 0
     for segment in result["segments"]:
         if segment["type"] == "gap":
             segment["source"] = gap_sources[gap_i]
             gap_i += 1
 
+    if probe_config:
+        try:
+            result = probe_placement.insert_probe(result, **probe_config)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
     return jsonify(result)
+
+
+def _parse_probe(data):
+    """Returns None if no probe was requested, otherwise a dict ready to
+    pass straight to probe_placement.insert_probe. Raises ValueError with
+    a message safe to show the user."""
+    probe_raw = data.get("probe")
+    if not probe_raw or not probe_raw.get("enabled"):
+        return None
+
+    forward_name = str(probe_raw.get("forward_name", "")).strip()
+    reverse_name = str(probe_raw.get("reverse_name", "")).strip()
+    sequence = str(probe_raw.get("sequence", "")).strip().upper()
+
+    if not forward_name or not reverse_name:
+        raise ValueError("Choose which primer pair the probe belongs to.")
+    if not sequence:
+        raise ValueError("The probe needs a sequence.")
+
+    invalid = sorted({ch for ch in sequence if ch not in "ACGT"})
+    if invalid:
+        raise ValueError(
+            f"The probe sequence contains character(s) that aren't plain A/C/G/T: "
+            f"{', '.join(invalid)}. Degenerate codes aren't supported for probes."
+        )
+
+    start_position = probe_raw.get("start_position")
+    if start_position in (None, ""):
+        start_position = None
+    else:
+        try:
+            start_position = int(start_position)
+        except (TypeError, ValueError):
+            raise ValueError("Probe start position must be a whole number.")
+        if start_position < 0:
+            raise ValueError("Probe start position cannot be negative.")
+
+    return {
+        "forward_name": forward_name,
+        "reverse_name": reverse_name,
+        "probe_sequence": sequence,
+        "start_position": start_position,
+    }
 
 
 @app.post("/api/align")
@@ -298,6 +359,15 @@ def api_align():
         primers.append({
             "sequence": sequence_field, "direction": direction, "label": name,
             "substitutions": substitutions,
+        })
+
+    probe_raw = data.get("probe")
+    if probe_raw and probe_raw.get("enabled") and probe_raw.get("sequence"):
+        primers.append({
+            "sequence": str(probe_raw["sequence"]).strip().upper(),
+            "direction": "forward",  # inserted exactly as given, never reverse-complemented
+            "label": "Probe",
+            "substitutions": {},
         })
 
     result = alignment.align_primers(primers, sequence)
@@ -342,23 +412,24 @@ def api_design_fix():
     try:
         primers, gaps, flank_length, gap_sources, degenerate_info = _parse_primers_and_pairs(data)
         gc_percent, gc_percent_source = _resolve_gc_percent(data)
+        probe_config = _parse_probe(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
     # Gap lengths only depend on primer lengths and your fragment lengths -
     # not on the random sequence content - so they're fixed for every retry;
-    # only the random flanks/infills get re-rolled each attempt.
+    # only the random flanks/infills get re-rolled each attempt. gap_sources
+    # and probe_config are applied inside find_clean_design itself, in the
+    # right order relative to each other, for every attempt.
     try:
-        result = refine.find_clean_design(primers, gaps, gc_percent, flank_length)
+        result = refine.find_clean_design(
+            primers, gaps, gc_percent, flank_length,
+            probe_config=probe_config, gap_sources=gap_sources,
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     result["design"]["gc_percent_source"] = gc_percent_source
     result["design"]["degenerate_info"] = degenerate_info
-    gap_i = 0
-    for segment in result["design"]["segments"]:
-        if segment["type"] == "gap":
-            segment["source"] = gap_sources[gap_i]
-            gap_i += 1
 
     return jsonify(result)
 

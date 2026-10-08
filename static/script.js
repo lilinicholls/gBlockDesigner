@@ -22,18 +22,19 @@ function escapeHtml(str) {
 // ---------- Primer rows (add/remove, dynamic) ----------
 
 const ALLOWED_BASES = new Set(["A", "C", "G", "T", "R", "Y", "S", "W", "K", "M", "B", "D", "H", "V", "N"]);
+const PLAIN_BASES = new Set(["A", "C", "G", "T"]);
 
-// Filters a primer sequence input down to valid IUPAC characters as you
+// Filters a sequence input down to an allowed set of characters as you
 // type, so it's not possible to enter anything else - rather than letting
 // something invalid through and only catching it later.
-function sanitizePrimerInput(el) {
+function sanitizeSequenceInput(el, allowedSet) {
   const cursorPos = el.selectionStart;
   const original = el.value;
   const upper = original.toUpperCase();
   let filtered = "";
   let removedBeforeCursor = 0;
   for (let i = 0; i < upper.length; i++) {
-    if (ALLOWED_BASES.has(upper[i])) {
+    if (allowedSet.has(upper[i])) {
       filtered += upper[i];
     } else if (i < cursorPos) {
       removedBeforeCursor++;
@@ -44,6 +45,10 @@ function sanitizePrimerInput(el) {
     const newPos = Math.max(0, cursorPos - removedBeforeCursor);
     el.setSelectionRange(newPos, newPos);
   }
+}
+
+function sanitizePrimerInput(el) {
+  sanitizeSequenceInput(el, ALLOWED_BASES);
 }
 
 let primerUidCounter = 0;
@@ -107,9 +112,12 @@ function addPairRow(forwardUid = "", reverseUid = "", fragmentLength = "") {
     <button type="button" class="remove-pair-row" title="Remove this pair">&times;</button>
   `;
   row.querySelector(".pair-fragment-length").value = fragmentLength;
+  row.querySelector(".pair-forward").addEventListener("change", refreshProbePairOptions);
+  row.querySelector(".pair-reverse").addEventListener("change", refreshProbePairOptions);
   row.querySelector(".remove-pair-row").addEventListener("click", () => {
     if (document.querySelectorAll(".pair-row").length <= 1) return; // always keep at least one pair
     row.remove();
+    refreshProbePairOptions();
   });
   container.appendChild(row);
   refreshPairPrimerOptions();
@@ -138,6 +146,7 @@ function refreshPairPrimerOptions() {
     if (forwardOptions.some((p) => p.uid === prevFwd)) fwdSelect.value = prevFwd;
     if (reverseOptions.some((p) => p.uid === prevRev)) revSelect.value = prevRev;
   });
+  refreshProbePairOptions();
 }
 
 function collectPairs() {
@@ -151,6 +160,48 @@ function collectPairs() {
       fragment_length: row.querySelector(".pair-fragment-length").value,
     };
   });
+}
+
+// ---------- Probe (optional) ----------
+
+function refreshProbePairOptions() {
+  const select = $("probe_pair_select");
+  const prevValue = select.value;
+  const pairs = collectPairs().filter((p) => p.forward_name && p.reverse_name);
+
+  select.innerHTML = pairs.map((p) =>
+    `<option value="${escapeHtml(p.forward_name)}|${escapeHtml(p.reverse_name)}">${escapeHtml(p.forward_name)} &amp; ${escapeHtml(p.reverse_name)}</option>`
+  ).join("");
+
+  if (pairs.some((p) => `${p.forward_name}|${p.reverse_name}` === prevValue)) {
+    select.value = prevValue;
+  }
+}
+
+$("add_probe_checkbox").addEventListener("change", (e) => {
+  if (e.target.checked) {
+    refreshProbePairOptions();
+    show($("probe-fields"));
+  } else {
+    hide($("probe-fields"));
+  }
+});
+
+$("probe_sequence").addEventListener("input", (e) => sanitizeSequenceInput(e.target, PLAIN_BASES));
+
+function collectProbe() {
+  if (!$("add_probe_checkbox").checked) return null;
+
+  const [forwardName, reverseName] = ($("probe_pair_select").value || "").split("|");
+  const probe = {
+    enabled: true,
+    sequence: $("probe_sequence").value.trim(),
+    forward_name: forwardName || "",
+    reverse_name: reverseName || "",
+  };
+  const startPosition = $("probe_start_position").value.trim();
+  if (startPosition !== "") probe.start_position = parseInt(startPosition, 10);
+  return probe;
 }
 
 // Start with the simplest common case: one forward + one reverse primer, one pair.
@@ -259,6 +310,8 @@ function buildDesignPayload() {
   } else {
     payload.gc_percent = $("gc_percent").value;
   }
+  const probe = collectProbe();
+  if (probe) payload.probe = probe;
   return payload;
 }
 
@@ -333,8 +386,9 @@ async function submitDesign(endpoint) {
 function renderDesign(data) {
   const rows = data.segments.map((s) => {
     const tag = s.type === "primer" ? ` <span class="tag tag-${s.direction}">${s.direction}</span>` : "";
+    const probeTag = s.type === "probe" ? ` <span class="tag tag-probe">probe</span>` : "";
     return `<tr>
-      <td>${escapeHtml(s.label)}${tag}</td>
+      <td>${escapeHtml(s.label)}${tag}${probeTag}</td>
       <td>${s.length} bp</td>
       <td><code>${escapeHtml(s.seq)}</code></td>
     </tr>`;
@@ -344,8 +398,13 @@ function renderDesign(data) {
     ? " (auto-detected from your target sequence)"
     : "";
 
+  const flankNote = data.flank_length_note
+    ? `<div class="reminder-box">&#8505; Extended to meet IDT's minimum order requirement of 125bp: ${escapeHtml(data.flank_length_note)}</div>`
+    : "";
+
   $("design-result").innerHTML = `
     <div><span class="badge ok">Designed</span> ${data.length} bp total &middot; overall GC ${data.overall_gc_percent}% (target ${data.target_gc_percent}%${gcSourceNote})</div>
+    ${flankNote}
     <div class="seq-block">${escapeHtml(data.sequence)}</div>
     ${renderDiagram(data.segments)}
     <table class="segment-table">
@@ -360,6 +419,7 @@ function renderDiagram(segments) {
   const chips = segments.map((s) => {
     if (s.type === "flank") return `<span class="diagram-chip diagram-flank">Flanking (${s.length}bp)</span>`;
     if (s.type === "primer") return `<span class="diagram-chip diagram-primer diagram-${s.direction}">${escapeHtml(s.label)}</span>`;
+    if (s.type === "probe") return `<span class="diagram-chip diagram-probe">Probe</span>`;
     return `<span class="diagram-chip diagram-gap">${s.length}</span>`;
   });
   return `<div class="diagram-row">${chips.join('<span class="diagram-sep">|</span>')}</div>`;
@@ -384,6 +444,7 @@ $("run-alignment").addEventListener("click", async () => {
           direction: p.direction,
           degenerate_substitutions: (currentDesign.degenerate_info || {})[p.name] || [],
         })),
+        probe: collectProbe(),
         sequence: currentDesign.sequence,
       }),
     });
