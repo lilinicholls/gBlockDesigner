@@ -9,7 +9,8 @@
 <body>
   <header>
     <h1>gBlock Designer</h1>
-    <p class="subtitle">Design a synthetic gBlock from one or more primers, then BLAST it and screen it against IDT.</p>
+    <p class="subtitle">Design synthetic DNA from one or more primers, then BLAST it and screen it against manufacturing parameters.
+    If you use this software, please cite it: <a href="https://doi.org/10.5281/zenodo.22886133" target="_blank" rel="noopener noreferrer"> Nicholls (2026)</a>.</p>
     <button type="button" class="reset-button" id="reset-top">Reset</button>
   </header>
 
@@ -19,7 +20,7 @@
       <form id="design-form">
 
         <h3 class="subsection-title">Primers</h3>
-        <p class="hint">Add every primer you're using, once each. If two pairs share a primer (like one reverse primer shared by two forwards), it only goes here once &mdash; you'll pick it again below when building each pair.</p>
+        <p class="hint">Add every primer you're using individually, then build pairs.</p>
         <div id="primer-rows"></div>
         <button type="button" id="add-primer-row" class="tertiary-button">+ Add another primer</button>
 
@@ -27,10 +28,10 @@
           <input type="checkbox" id="auto_substitute_degenerate" checked>
           Automatically substitute degenerate bases
         </label>
-        <p class="hint">Primers can contain IUPAC degenerate codes (R, Y, S, W, K, M, B, D, H, V, N) &mdash; but a gBlock has to be one exact sequence, so each one gets resolved to a single real base. Left on, this happens automatically (favouring A/T over G/C). Turn it off to choose the base yourself for every degenerate position instead.</p>
+        <p class="hint">Primers can contain degenerate bases, but gBlocks cannot. Degenerate bases are automatically substituted using <a href="https://www.bioinformatics.org/sms/iupac.html" target="_blank" rel="noopener noreferrer"> IUPAC codes </a>, favouring A/T over G/C. Turn it off to choose the base at every degenerate position.</p>
 
         <h3 class="subsection-title">Primer pairs</h3>
-        <p class="hint">Each pair needs a forward and a reverse primer (picked from the list above) and a fragment length: the length of sequence strictly <em>between</em> that pair's own two primers (not counting those two primers themselves &mdash; though it does count any other primer that happens to sit in between). Gaps between primers are worked out automatically from these.</p>
+        <p class="hint">Select pairs from the list above and choose the fragment length for each pair (not counting the primers themselves).</p>
         <div id="pair-rows"></div>
         <button type="button" id="add-pair-row" class="tertiary-button">+ Add another pair</button>
 
@@ -40,10 +41,10 @@
           Add a probe
         </label>
         <div id="probe-fields" class="hidden">
-          <p class="hint">The probe is inserted exactly as typed (plain A/C/G/T only, no degenerate codes) at a specific spot within one primer pair's region. "Start position" counts from right after that pair's forward primer ends &mdash; leave it blank to center the probe automatically.</p>
+          <p class="hint">The probe is inserted exactly as typed (plain A/C/G/T only, no degenerate codes) at a specific place within one primer pair's region. "Start position" counts from the right after that pair's forward primer ends. If the start position is left blank, the probe is automatically centred.</p>
           <div class="row">
             <label>
-              For primer pair
+              Primer pair
               <select id="probe_pair_select"></select>
             </label>
             <label>
@@ -59,9 +60,9 @@
 
         <div class="row">
           <label>
-            Flank length, bp
+            Flank length (bp)
             <input type="number" id="flank_length" value="30" min="0" required>
-            <span class="field-note">Extra random buffer added before the first and after the last primer.</span>
+            <span class="field-note">Buffer added before the first and after the last primer.</span>
           </label>
         </div>
 
@@ -74,7 +75,7 @@
 
         <div id="manual-gc-field">
           <label>
-            Target GC content, %
+            Target GC content (%)
             <input type="number" id="gc_percent" value="50" min="0" max="100" step="0.1">
           </label>
         </div>
@@ -82,7 +83,7 @@
         <div id="target-sequence-field" class="hidden">
           <label>
             Paste your target sequence
-            <textarea id="target_sequence" rows="4" placeholder="Paste the sequence your primers were designed against..."></textarea>
+            <textarea id="target_sequence" rows="4" placeholder="Paste the sequence your primers were designed against"></textarea>
             <span class="field-note" id="target-gc-preview"></span>
           </label>
         </div>
@@ -108,14 +109,14 @@
 
     <section class="panel hidden" id="blast-panel">
       <h2>3. NCBI BLAST</h2>
-      <p class="hint">Searches NCBI's public database for existing sequences that match your designed fragment. This can take 30 seconds to several minutes.</p>
+      <p class="hint">Searches <a href="https://blast.ncbi.nlm.nih.gov/" target="_blank" rel="noopener noreferrer">NCBI's public database</a> for existing sequences that match your designed fragment. This can take 30 seconds to several minutes.</p>
       <button id="run-blast">Run BLAST</button>
       <div id="blast-result" class="result hidden"></div>
     </section>
 
     <section class="panel hidden" id="idt-panel">
       <h2>4. Manufacturing complexity check</h2>
-      <p class="hint">Checks your sequence for the same kinds of problems IDT's ordering tool looks for: unusual GC content, repeated letters, repeated chunks, and hairpins (spots where the DNA could fold back on itself). This runs entirely on your own computer &mdash; nothing is sent to IDT.</p>
+      <p class="hint">Checks your sequence for the same kinds of problems <a href="https://www.idtdna.com/site/order/gblockentry" target="_blank" rel="noopener noreferrer">IDT's ordering tool</a> looks for: unusual GC content, repeated letters, repeated chunks, and hairpins.</p>
       <button id="run-complexity">Run complexity check</button>
       <div id="complexity-result" class="result hidden"></div>
       <button id="fix-issues" class="hidden secondary-button">Try to fix flagged issues</button>
