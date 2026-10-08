@@ -66,6 +66,7 @@ function addPrimerRow(defaultDirection = "forward", defaultName = "") {
       <option value="reverse">Reverse</option>
     </select>
     <input type="text" class="primer-sequence" placeholder="Primer sequence (5'&rarr;3'). ACGT + IUPAC codes only" required>
+    <input type="text" class="primer-sequence" placeholder="Primer Sequence (5'-3')" required>
     <button type="button" class="remove-primer-row" title="Remove this primer">&times;</button>
   `;
   row.querySelector(".primer-direction").value = defaultDirection;

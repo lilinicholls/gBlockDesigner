@@ -9,17 +9,16 @@
   --amber: #b5792a;
   --danger: #a3402e;
   --sans: "Cooper Hewitt", "Segoe UI", sans-serif;
-  /* Everything uses --sans now, except the alignment view below, which
-     needs its "|" match-bar characters to land exactly under each base -
-     only a monospace font guarantees that, so it alone keeps the original
-     monospace font via --mono-alignment rather than this variable. */
+  /* Every element in this file uses one font, per request - including the
+     sequence/alignment views that used to be monospace (--mono used to be
+     IBM Plex Mono). One real side effect worth knowing about: the
+     alignment view's "|" match-bar characters lined up exactly under each
+     base only because every character in a monospace font is the same
+     width; Cooper Hewitt isn't monospaced, so that bar may drift slightly
+     out of column under long sequences. Say if that's worth reverting just
+     for that one view. */
   --mono: var(--sans);
-  --mono-alignment: "IBM Plex Mono", "SF Mono", Consolas, monospace;
 }
-
-/* IBM Plex Mono is loaded only for the alignment view now (see
-   --mono-alignment above and .align-block below). */
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 /* Cooper Hewitt is self-hosted (it isn't distributed via Google Fonts) -
    files live in static/fonts/, under the same license as the museum's own
@@ -383,7 +382,7 @@ textarea {
 .hit-row:last-child { border-bottom: none; }
 
 .align-block {
-  font-family: var(--mono-alignment);
+  font-family: var(--mono);
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 3px;
