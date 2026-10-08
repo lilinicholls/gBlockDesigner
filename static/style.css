@@ -8,17 +8,25 @@
   --moss-dark: #2c4f38;
   --amber: #b5792a;
   --danger: #a3402e;
+  /* Plain action buttons (Design gBlock, Run BLAST, Add another primer,
+     etc.) use this neutral teal rather than --moss (green), which is now
+     reserved for an actual positive result (an OK badge, an exact-match
+     alignment). Red is likewise still only used for errors and the X
+     remove buttons, not plain actions. */
+  --action: var(--line);
+  --action-dark: #075750;
   --sans: "Cooper Hewitt", "Segoe UI", sans-serif;
-  /* Every element in this file uses one font, per request - including the
-     sequence/alignment views that used to be monospace (--mono used to be
-     IBM Plex Mono). One real side effect worth knowing about: the
-     alignment view's "|" match-bar characters lined up exactly under each
-     base only because every character in a monospace font is the same
-     width; Cooper Hewitt isn't monospaced, so that bar may drift slightly
-     out of column under long sequences. Say if that's worth reverting just
-     for that one view. */
+  /* Everything uses --sans now, except the alignment view below, which
+     needs its "|" match-bar characters to land exactly under each base -
+     only a monospace font guarantees that, so it alone keeps the original
+     monospace font via --mono-alignment rather than this variable. */
   --mono: var(--sans);
+  --mono-alignment: "IBM Plex Mono", "SF Mono", Consolas, monospace;
 }
+
+/* IBM Plex Mono is loaded only for the alignment view now (see
+   --mono-alignment above and .align-block below). */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 /* Cooper Hewitt is self-hosted (it isn't distributed via Google Fonts) -
    files live in static/fonts/, under the same license as the museum's own
@@ -104,10 +112,10 @@ header h1 {
   margin: 1rem auto 2rem;
   padding: 0.65rem 1.4rem;
   font-size: 0.9rem;
-  border-color: var(--moss);
-  color: var(--moss-dark);
+  border-color: var(--action);
+  color: var(--action);
 }
-.reset-button-bottom:hover { background: #eef4ef; color: var(--moss-dark); border-color: var(--moss); }
+.reset-button-bottom:hover { background: #eef4ef; color: var(--action-dark); border-color: var(--action-dark); }
 .subtitle {
   margin: 0;
   color: var(--ink);
@@ -167,7 +175,7 @@ input:focus { outline: 2px solid var(--moss); outline-offset: 1px; }
 
 button {
   align-self: flex-start;
-  background: var(--moss);
+  background: var(--action);
   color: #fff;
   border: none;
   padding: 0.6rem 1.1rem;
@@ -177,13 +185,13 @@ button {
   cursor: pointer;
 }
 
-button:hover { background: var(--moss-dark); }
+button:hover { background: var(--action-dark); }
 button:disabled { background: #9aa39c; cursor: not-allowed; }
 button.secondary-button { background: var(--amber); margin-top: 0.9rem; }
 button.secondary-button:hover { background: #96601e; }
 button.tertiary-button {
   background: transparent;
-  color: var(--moss-dark);
+  color: var(--action);
   border: 1px dashed var(--line);
   align-self: flex-start;
 }
@@ -382,7 +390,7 @@ textarea {
 .hit-row:last-child { border-bottom: none; }
 
 .align-block {
-  font-family: var(--mono);
+  font-family: var(--mono-alignment);
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 3px;
