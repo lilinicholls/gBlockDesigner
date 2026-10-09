@@ -52,7 +52,7 @@ body {
 header {
   padding: 2.5rem 2rem 1.5rem;
   border-bottom: 1px solid var(--line);
-  max-width: 1100px;
+  max-width: 920px;
   margin: 0 auto;
   position: relative;
 }
@@ -96,7 +96,7 @@ header h1 {
 .subtitle a { color: #fff; font-weight: 600; }
 
 main {
-  max-width: 1100px;
+  max-width: 920px;
   margin: 0 auto;
   padding: 1.5rem 2rem 4rem;
 }
