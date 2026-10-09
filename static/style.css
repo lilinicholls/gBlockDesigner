@@ -15,7 +15,7 @@
      remove buttons, not plain actions. */
   --action: var(--line);
   --action-dark: #075750;
-  --sans: "Cooper Hewitt", "Segoe UI", sans-serif;
+  --sans: Aptos, "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
   /* Everything uses --sans now, except the alignment view below, which
      needs its "|" match-bar characters to land exactly under each base -
      only a monospace font guarantees that, so it alone keeps the original
@@ -89,7 +89,7 @@ header h1 {
   font-size: 2.25rem;
   margin: 0 0 0.35rem;
   letter-spacing: -0.01em;
-  color: var(--ink); /* the lighter teal background has good contrast with black, unlike the darker one before */
+  color: #fff;
   text-align: center;
 }
 
@@ -118,10 +118,10 @@ header h1 {
 .reset-button-bottom:hover { background: #eef4ef; color: var(--action-dark); border-color: var(--action-dark); }
 .subtitle {
   margin: 0;
-  color: var(--ink);
+  color: #fff;
   font-size: 0.95rem;
 }
-.subtitle a { color: var(--ink); font-weight: 600; }
+.subtitle a { color: #fff; font-weight: 600; }
 
 main {
   max-width: 760px;
