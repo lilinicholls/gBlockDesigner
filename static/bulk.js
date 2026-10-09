@@ -98,23 +98,27 @@
       `<option value="${escapeHtml(p.id)}"${i === selectedIndex ? " selected" : ""}>${escapeHtml(p.id)}</option>`).join("");
   }
 
-  function addRuleRow() {
+  function addRuleRow(preset) {
     if (parsedPairs.length < 2) return;
+    const p = preset && preset.a ? preset : null;
+    const aIndex = p ? Math.max(parsedPairs.findIndex((x) => x.id === p.a), 0) : 0;
+    const bIndex = p ? Math.max(parsedPairs.findIndex((x) => x.id === p.b), 0) : 1;
     const row = document.createElement("div");
     row.className = "rule-row";
     row.innerHTML = `
-      <select class="rule-a" aria-label="First pair">${pairOptionsHtml(0)}</select>
+      <select class="rule-a" aria-label="First pair">${pairOptionsHtml(aIndex)}</select>
       <select class="rule-type" aria-label="Rule type">
         <option value="together">must be on the same gBlock as</option>
         <option value="apart">cannot be on the same gBlock as</option>
       </select>
-      <select class="rule-b" aria-label="Second pair">${pairOptionsHtml(1)}</select>
+      <select class="rule-b" aria-label="Second pair">${pairOptionsHtml(bIndex)}</select>
       <button type="button" class="remove-rule-row" title="Remove this rule">&times;</button>
     `;
+    if (p && p.type) row.querySelector(".rule-type").value = p.type;
     row.querySelector(".remove-rule-row").addEventListener("click", () => row.remove());
     $("bulk-rules").appendChild(row);
   }
-  $("bulk-add-rule").addEventListener("click", addRuleRow);
+  $("bulk-add-rule").addEventListener("click", () => addRuleRow());
 
   function collectRules() {
     return Array.from(document.querySelectorAll("#bulk-rules .rule-row")).map((row) => ({
@@ -207,16 +211,10 @@
       <div class="seq-block">${escapeHtml(b.sequence)}</div>
       <button type="button" class="tertiary-button copy-seq">Copy sequence</button>
       ${renderDiagram(b.segments)}
-      <div class="bulk-actions">
-        <button type="button" class="tertiary-button ba-align">Align primers</button>
-        <button type="button" class="tertiary-button ba-blast">Run BLAST</button>
-        <button type="button" class="tertiary-button ba-idt">Complexity check</button>
-        <button type="button" class="secondary-button ba-fix${b.flagged.length ? "" : " hidden"}">Try to fix flagged issues</button>
+      <div class="bulk-actions${b.flagged.length ? "" : " hidden"}">
+        <button type="button" class="secondary-button ba-fix">Try to fix flagged issues</button>
       </div>
       <div class="bb-status status-line hidden"></div>
-      <div class="bb-result bb-align-result hidden"></div>
-      <div class="bb-result bb-blast-result hidden"></div>
-      <div class="bb-result bb-idt-result hidden"></div>
       <details class="bulk-details"><summary>Show segments</summary>
         <table class="segment-table">
           <colgroup><col style="width:22%"><col style="width:14%"><col style="width:64%"></colgroup>
@@ -225,6 +223,65 @@
         </table>
       </details>
     </div>`;
+  }
+
+  // ---------- Next steps (below the gBlocks, like the single-gBlock page) ----------
+
+  const STEPS = {
+    align: {
+      title: "Primer alignment",
+      hint: "Checks that every primer binds where it should in its gBlock, and flags anywhere else it could also bind.",
+      button: "Align primers on all gBlocks",
+      busy: "Aligning...",
+    },
+    blast: {
+      title: "NCBI BLAST",
+      hint: "Searches NCBI's public database for existing sequences that match each designed gBlock. NCBI is searched two gBlocks at a time, so a large batch can take several minutes.",
+      button: "Run BLAST on all gBlocks",
+      busy: "Running...",
+    },
+    idt: {
+      title: "Manufacturing complexity check",
+      hint: "Checks each gBlock for the same kinds of problems IDT's ordering tool looks for: unusual GC content, repeated letters, repeated chunks, and hairpins. Always paste your final sequences into IDT's own tool before ordering.",
+      button: "Run complexity check on all gBlocks",
+      busy: "Checking...",
+    },
+  };
+  let stepResults = { align: {}, blast: {}, idt: {} };
+
+  function stepSectionHtml(step) {
+    const t = STEPS[step];
+    return `<div class="bulk-step" id="bulk-step-${step}">
+      <h3 class="subsection-title">${t.title}</h3>
+      <p class="hint">${t.hint}</p>
+      <button type="button" class="step-run" data-step="${step}">${t.button}</button>
+      <div class="bulk-step-results hidden" id="bulk-results-${step}"></div>
+    </div>`;
+  }
+
+  function renderStep(step) {
+    const container = $(`bulk-results-${step}`);
+    if (!container || !lastResult) return;
+    const items = Object.keys(stepResults[step]).map(Number).sort((a, b) => a - b).map((i) => {
+      const b = lastResult.blocks[i];
+      const rerun = `<button type="button" class="tertiary-button step-rerun" data-step="${step}" data-index="${i}">Re-run</button>`;
+      return `<div class="step-item" data-index="${i}">
+        <div class="step-item-head"><strong>${escapeHtml(b.name)}</strong> ${rerun}</div>
+        ${stepResults[step][i]}
+      </div>`;
+    });
+    container.innerHTML = items.join("");
+    if (items.length) show(container); else hide(container);
+  }
+
+  function setStepItem(step, index, html) {
+    stepResults[step][index] = html;
+    renderStep(step);
+  }
+
+  function scrollToStep(step) {
+    const el = $(`bulk-step-${step}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderResult(data) {
@@ -236,40 +293,26 @@
     const notes = (data.notes || []).length
       ? `<div class="reminder-box">${data.notes.map(escapeHtml).join("<br><br>")}</div>` : "";
 
+    stepResults = { align: {}, blast: {}, idt: {} };
     $("bulk-result").innerHTML = `
       <div class="bulk-summary-line">${summaryBadge}
         ${data.blocks.length} gBlock${data.blocks.length === 1 ? "" : "s"} from ${data.pair_count} primer pair${data.pair_count === 1 ? "" : "s"}.
         ${designed ? '<button type="button" class="tertiary-button" id="bulk-download">Download CSV</button>' : ""}
       </div>
-      ${designed ? `<div class="bulk-actions bulk-actions-all">
-        <span class="status-line">Run on every gBlock:</span>
-        <button type="button" class="tertiary-button" id="bulk-align-all">Align all</button>
-        <button type="button" class="tertiary-button" id="bulk-blast-all">BLAST all</button>
-        <button type="button" class="tertiary-button" id="bulk-idt-all">Complexity check all</button>
-      </div>
-      <div class="status-line">BLAST searches NCBI two at a time, so a large batch can take several minutes.</div>` : ""}
       ${notes}
       <div id="bulk-blocks">${data.blocks.map(renderBlock).join("")}</div>
+      ${designed ? ["align", "blast", "idt"].map(stepSectionHtml).join("") : ""}
     `;
     show($("bulk-result"));
 
     const dl = $("bulk-download");
     if (dl) dl.addEventListener("click", downloadCsv);
-    if ($("bulk-align-all")) {
-      $("bulk-align-all").addEventListener("click", () => runAll(".ba-align", runAlign, $("bulk-align-all")));
-      $("bulk-blast-all").addEventListener("click", () => runAll(".ba-blast", runBlast, $("bulk-blast-all")));
-      $("bulk-idt-all").addEventListener("click", () => runAll(".ba-idt", runComplexity, $("bulk-idt-all")));
-    }
   }
 
-  // ---------- Per-gBlock actions (alignment, BLAST, complexity, fix) ----------
+  // ---------- Running the steps ----------
 
-  function blockOf(card) { return lastResult.blocks[Number(card.dataset.index)]; }
-
-  function setOutput(card, selector, html) {
-    const out = card.querySelector(selector);
-    out.innerHTML = html;
-    show(out);
+  function designedIndexes() {
+    return lastResult.blocks.map((b, i) => (b.error ? null : i)).filter((i) => i !== null);
   }
 
   async function postJson(url, body) {
@@ -293,35 +336,76 @@
     }
   }
 
-  async function runAlign(card) {
-    const b = blockOf(card);
-    await withButton(card.querySelector(".ba-align"), "Aligning...", async () => {
-      try {
-        const primers = b.primers.map((p) => ({
-          name: p.name, sequence: p.sequence, direction: p.direction,
-          degenerate_substitutions: p.degenerate_substitutions,
-        }));
-        (b.probes || []).forEach((p) => primers.push({
-          name: `Probe (${p.pair_id})`, sequence: p.sequence, direction: "forward", degenerate_substitutions: [],
-        }));
-        const data = await postJson("/api/align", { primers, sequence: b.sequence });
-        setOutput(card, ".bb-align-result", `<h4 class="bb-result-title">Primer alignment</h4>${alignmentHtml(data)}`);
-      } catch (err) {
-        setOutput(card, ".bb-align-result", `<span class="badge error">Error</span> ${escapeHtml(err.message)}`);
-      }
+  const errorHtml = (message) => `<span class="badge error">Error</span> ${escapeHtml(message)}`;
+
+  // Where each primer and probe sits in a gBlock, labelled the same way the
+  // alignment request labels them.
+  function spansFor(block) {
+    return primerSpans(block.segments, (seg) => {
+      if (seg.type !== "probe") return seg.label;
+      const pair = parsedPairs.find((p) => `${p.forward_name} & ${p.reverse_name}` === seg.pair);
+      return `Probe (${pair ? pair.id : seg.pair})`;
     });
   }
 
-  async function runComplexity(card) {
-    const b = blockOf(card);
-    await withButton(card.querySelector(".ba-idt"), "Checking...", async () => {
-      try {
-        const data = await postJson("/api/complexity-check", { sequence: b.sequence });
-        setOutput(card, ".bb-idt-result", `<h4 class="bb-result-title">Manufacturing complexity check</h4>${complexityHtml(data)}`);
-      } catch (err) {
-        setOutput(card, ".bb-idt-result", `<span class="badge error">Error</span> ${escapeHtml(err.message)}`);
-      }
+  function pairsOfLabel(label, block) {
+    const probe = label.match(/^Probe \((.+)\)$/);
+    if (probe) return [probe[1]];
+    return block.pair_ids.filter((id) => {
+      const p = parsedPairs.find((x) => x.id === id);
+      return p && (p.forward_name === label || p.reverse_name === label);
     });
+  }
+
+  function adviceFor(block) {
+    return (result, otherLabels) => otherLabels.map((other) => {
+      const mine = pairsOfLabel(result.primer_label, block);
+      const theirs = pairsOfLabel(other, block);
+      if (mine.some((id) => theirs.includes(id))) {
+        return `<div class="status-line"><strong>${escapeHtml(result.primer_label)}</strong> and <strong>${escapeHtml(other)}</strong> belong to the same pair, so they can't be moved onto different gBlocks, and re-rolling the random DNA won't fix it &mdash; the two primers are very similar to each other, which is worth a look.</div>`;
+      }
+      const a = mine[0];
+      const b = theirs[0];
+      const button = a && b
+        ? ` <button type="button" class="tertiary-button add-rule-btn" data-a="${escapeHtml(a)}" data-b="${escapeHtml(b)}">Add rule: ${escapeHtml(a)} cannot be with ${escapeHtml(b)}</button>`
+        : "";
+      return `<div class="status-line">This is because of another primer (<strong>${escapeHtml(other)}</strong>), not the random sequence, ` +
+        `so re-rolling the random DNA (including "Try to fix flagged issues") <strong>won't fix it</strong>. ` +
+        `The only fix is to put ${a ? `pair ${escapeHtml(a)}` : escapeHtml(result.primer_label)} and ${b ? `pair ${escapeHtml(b)}` : escapeHtml(other)} on different gBlocks.${button}</div>`;
+    }).join("");
+  }
+
+  async function alignBlock(i) {
+    const b = lastResult.blocks[i];
+    try {
+      const spans = spansFor(b);
+      const startOf = (label) => (spans.find((sp) => sp.label === label) || {}).start;
+      const primers = b.primers.map((p) => ({
+        name: p.name, sequence: p.sequence, direction: p.direction,
+        degenerate_substitutions: p.degenerate_substitutions, expected_start: startOf(p.name),
+      }));
+      (b.probes || []).forEach((p) => {
+        const name = `Probe (${p.pair_id})`;
+        primers.push({ name, sequence: p.sequence, direction: "forward", degenerate_substitutions: [], expected_start: startOf(name) });
+      });
+      const data = await postJson("/api/align", { primers, sequence: b.sequence });
+      setStepItem("align", i, alignmentHtml(data, { spans, suggest: adviceFor(b) }));
+    } catch (err) {
+      setStepItem("align", i, errorHtml(err.message));
+    }
+  }
+
+  async function complexityBlock(i) {
+    const b = lastResult.blocks[i];
+    try {
+      const data = await postJson("/api/complexity-check", { sequence: b.sequence });
+      const fix = data.any_flagged
+        ? '<button type="button" class="secondary-button ba-fix">Try to fix flagged issues</button><div class="status-line fix-note hidden"></div>'
+        : "";
+      setStepItem("idt", i, `${complexityHtml(data)}${fix}`);
+    } catch (err) {
+      setStepItem("idt", i, errorHtml(err.message));
+    }
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -331,85 +415,124 @@
     running: "Running on NCBI's servers...",
   };
 
-  async function runBlast(card) {
-    const b = blockOf(card);
-    await withButton(card.querySelector(".ba-blast"), "Running...", async () => {
-      const title = '<h4 class="bb-result-title">NCBI BLAST</h4>';
-      try {
-        setOutput(card, ".bb-blast-result", `${title}<div class="status-line">Submitting to NCBI...</div>`);
-        const start = await postJson("/api/blast/start", { sequence: b.sequence });
-        for (;;) {
-          await sleep(4000);
-          if (!card.isConnected) return; // this gBlock was re-designed or the page was re-run
-          const res = await fetch(`/api/blast/status/${start.job_id}`);
-          const job = await res.json();
-          if (!res.ok) throw new Error(job.error || "Job lookup failed");
-          if (job.status === "done") {
-            setOutput(card, ".bb-blast-result", `${title}${blastHtml(job)}`);
-            return;
-          }
-          if (job.status === "error") {
-            setOutput(card, ".bb-blast-result", `${title}<span class="badge error">BLAST error</span> ${escapeHtml(job.error)}`);
-            return;
-          }
-          setOutput(card, ".bb-blast-result", `${title}<div class="status-line">${BLAST_STATUS[job.status] || `Status: ${escapeHtml(job.status)}...`}</div>`);
+  async function blastBlock(i) {
+    const b = lastResult.blocks[i];
+    const stillCurrent = () => lastResult && lastResult.blocks[i] === b && $("bulk-results-blast");
+    try {
+      setStepItem("blast", i, '<div class="status-line">Submitting to NCBI...</div>');
+      const start = await postJson("/api/blast/start", { sequence: b.sequence });
+      for (;;) {
+        await sleep(4000);
+        if (!stillCurrent()) return; // this gBlock was re-designed or the page was re-run
+        const res = await fetch(`/api/blast/status/${start.job_id}`);
+        const job = await res.json();
+        if (!res.ok) throw new Error(job.error || "Job lookup failed");
+        if (job.status === "done") { setStepItem("blast", i, blastHtml(job)); return; }
+        if (job.status === "error") {
+          setStepItem("blast", i, `<span class="badge error">BLAST error</span> ${escapeHtml(job.error)}`);
+          return;
         }
-      } catch (err) {
-        if (card.isConnected) setOutput(card, ".bb-blast-result", `${title}<span class="badge error">Error</span> ${escapeHtml(err.message)}`);
+        setStepItem("blast", i, `<div class="status-line">${BLAST_STATUS[job.status] || `Status: ${escapeHtml(job.status)}...`}</div>`);
       }
-    });
+    } catch (err) {
+      if (stillCurrent()) setStepItem("blast", i, errorHtml(err.message));
+    }
   }
 
-  async function runFix(card) {
-    const index = Number(card.dataset.index);
-    const b = blockOf(card);
-    const status = card.querySelector(".bb-status");
-    await withButton(card.querySelector(".ba-fix"), "Trying...", async () => {
-      status.textContent = "Re-rolling the random parts of this gBlock and re-checking...";
-      show(status);
+  const STEP_RUNNERS = { align: alignBlock, blast: blastBlock, idt: complexityBlock };
+
+  async function runStep(step, btn) {
+    if (!lastResult) return;
+    const indexes = designedIndexes();
+    await withButton(btn, STEPS[step].busy, async () => {
+      // Show a placeholder per gBlock straight away, so progress is visible.
+      indexes.forEach((i) => { stepResults[step][i] = '<div class="status-line">Working...</div>'; });
+      renderStep(step);
+      scrollToStep(step);
+      await Promise.all(indexes.map((i) => STEP_RUNNERS[step](i)));
+    });
+    scrollToStep(step); // finished - jump back to the results, wherever you've scrolled to meanwhile
+  }
+
+  async function rerunOne(step, index, btn) {
+    await withButton(btn, "Running...", () => STEP_RUNNERS[step](index));
+    const item = document.querySelector(`#bulk-results-${step} .step-item[data-index="${index}"]`);
+    if (item) item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  async function runFix(index, btn, fromStep) {
+    const b = lastResult.blocks[index];
+    const cardStatus = () => document.querySelector(`#bulk-blocks .bulk-block[data-index="${index}"] .bb-status`);
+    await withButton(btn, "Trying...", async () => {
       try {
         const fresh = await postJson("/api/bulk/redesign-block", {
           csv: csvText, mode: lastSettings.mode, name: b.name, pair_ids: b.pair_ids,
           flank_length: lastSettings.flank_length, gc_percent: lastSettings.gc_percent,
         });
         lastResult.blocks[index] = fresh;
+        const card = document.querySelector(`#bulk-blocks .bulk-block[data-index="${index}"]`);
         const holder = document.createElement("div");
         holder.innerHTML = renderBlock(fresh, index);
-        const newCard = holder.firstElementChild;
-        card.replaceWith(newCard);
-        const note = newCard.querySelector(".bb-status");
-        note.textContent = fresh.error
-          ? ""
+        card.replaceWith(holder.firstElementChild);
+
+        // Anything already run for the old sequence no longer applies.
+        ["align", "blast", "idt"].forEach((st) => { delete stepResults[st][index]; });
+        const message = fresh.error
+          ? fresh.error
           : (fresh.flagged.length
-            ? "Tried again and kept the best result, but some issues remain. Alignment, BLAST and check results for this gBlock were cleared because its sequence changed."
-            : "Fixed - nothing flagged now. Any earlier alignment, BLAST or check results for this gBlock were cleared because its sequence changed.");
-        if (note.textContent) show(note);
+            ? "Tried again and kept the best result, but some issues remain. Run the steps again to see results for the new sequence."
+            : "Fixed - nothing flagged now. Run the steps again to see results for the new sequence.");
+        if (fromStep) stepResults[fromStep][index] = `<div class="status-line">${escapeHtml(message)}</div>`;
+        ["align", "blast", "idt"].forEach(renderStep);
+        const note = cardStatus();
+        if (note) { note.textContent = message; show(note); }
       } catch (err) {
-        status.textContent = `Error: ${err.message}`;
+        const note = cardStatus();
+        if (note) { note.textContent = `Error: ${err.message}`; show(note); }
       }
     });
   }
 
-  async function runAll(selector, runner, triggerBtn) {
-    const cards = Array.from(document.querySelectorAll("#bulk-blocks .bulk-block"))
-      .filter((c) => c.querySelector(selector) && !c.querySelector(selector).disabled);
-    await withButton(triggerBtn, "Running...", () => Promise.all(cards.map(runner)));
+  function addSuggestedRule(btn) {
+    const a = btn.dataset.a;
+    const b = btn.dataset.b;
+    const exists = collectRules().some((r) => r.type === "apart" && ((r.a === a && r.b === b) || (r.a === b && r.b === a)));
+    if (!exists) addRuleRow({ a, b, type: "apart" });
+
+    let extra = "";
+    if (selectedLayout() !== "split") {
+      document.querySelector('input[name="bulk-layout"][value="split"]').checked = true;
+      show($("bulk-split-field"));
+      $("bulk-num-blocks").value = Math.max(2, lastResult ? lastResult.blocks.length : 2);
+      extra = ` (layout set to split across ${$("bulk-num-blocks").value} gBlocks)`;
+    }
+    btn.disabled = true;
+    btn.textContent = `Rule added${extra} - press Design gBlocks to apply it`;
+    $("bulk-design-btn").scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   $("bulk-result").addEventListener("click", (e) => {
-    const card = e.target.closest(".bulk-block");
-    if (!card || !lastResult) return;
-    if (e.target.closest(".ba-align")) runAlign(card);
-    else if (e.target.closest(".ba-blast")) runBlast(card);
-    else if (e.target.closest(".ba-idt")) runComplexity(card);
-    else if (e.target.closest(".ba-fix")) runFix(card);
-    else if (e.target.closest(".copy-seq")) copySequence(e.target.closest(".copy-seq"), card);
+    if (!lastResult) return;
+    const t = e.target;
+    const run = t.closest(".step-run");
+    const rerun = t.closest(".step-rerun");
+    const fix = t.closest(".ba-fix");
+    const copy = t.closest(".copy-seq");
+    const addRule = t.closest(".add-rule-btn");
+    if (run) runStep(run.dataset.step, run);
+    else if (rerun) rerunOne(rerun.dataset.step, Number(rerun.dataset.index), rerun);
+    else if (fix) {
+      const item = fix.closest(".step-item");
+      const card = fix.closest(".bulk-block");
+      runFix(Number((item || card).dataset.index), fix, item ? "idt" : null);
+    } else if (addRule) addSuggestedRule(addRule);
+    else if (copy) copySequence(copy, copy.closest(".bulk-block"));
   });
 
   // ---------- Copy + download ----------
 
   async function copySequence(btn, card) {
-    const seq = blockOf(card).sequence;
+    const seq = lastResult.blocks[Number(card.dataset.index)].sequence;
     try {
       await navigator.clipboard.writeText(seq);
       btn.textContent = "Copied";

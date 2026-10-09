@@ -358,9 +358,11 @@ def api_align():
             entry["position"]: entry["chosen_base"]
             for entry in (p.get("degenerate_substitutions") or [])
         }
+        expected_start = p.get("expected_start")
         primers.append({
             "sequence": sequence_field, "direction": direction, "label": name,
             "substitutions": substitutions,
+            "expected_start": expected_start if isinstance(expected_start, int) and not isinstance(expected_start, bool) else None,
         })
 
     probe_raw = data.get("probe")

@@ -628,3 +628,26 @@ input[type="file"] {
   font-size: 0.88rem;
 }
 .bb-result-title { margin: 0 0 0.5rem; font-size: 0.9rem; }
+
+/* Next-step sections below the gBlocks (alignment / BLAST / complexity) */
+.bulk-step {
+  margin-top: 1.5rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.bulk-step .subsection-title { margin: 0; }
+.bulk-step .hint { margin: 0; }
+.bulk-step-results { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.4rem; }
+.step-item {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.8rem 1rem;
+  font-size: 0.88rem;
+}
+.step-item-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.4rem; font-size: 0.95rem; }
+.step-item-head .step-rerun { padding: 0.25rem 0.7rem; font-size: 0.78rem; }
+.step-item .ba-fix { margin-top: 0.7rem; padding: 0.45rem 0.9rem; font-size: 0.85rem; }
+.add-rule-btn { margin-left: 0.4rem; padding: 0.3rem 0.7rem; font-size: 0.78rem; }

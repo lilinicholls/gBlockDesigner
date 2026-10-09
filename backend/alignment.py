@@ -31,9 +31,15 @@ def reverse_complement(seq: str) -> str:
     return seq.upper().translate(COMPLEMENT)[::-1]
 
 
-def _best_match(primer: str, sequence: str) -> dict:
+def _best_match(primer: str, sequence: str, expected_start=None) -> dict:
     """Finds where `primer` best lines up against `sequence`, using
-    IUPAC-aware compatibility rather than exact character matching."""
+    IUPAC-aware compatibility rather than exact character matching.
+
+    expected_start: where this primer was actually placed when the gBlock
+    was built, if known. If the primer matches there as well as it matches
+    anywhere (e.g. another, similar primer elsewhere in the gBlock matches
+    just as well), the intended spot is reported rather than whichever
+    equally-good spot happens to come first."""
     primer = primer.strip().upper()
     sequence = sequence.strip().upper()
     primer_len = len(primer)
@@ -56,6 +62,12 @@ def _best_match(primer: str, sequence: str) -> dict:
             if mismatches == 0:
                 break
 
+    if isinstance(expected_start, int) and 0 <= expected_start <= seq_len - primer_len:
+        expected_window = sequence[expected_start:expected_start + primer_len]
+        expected_mismatches = sum(1 for p, t in zip(primer, expected_window) if not iupac.bases_compatible(p, t))
+        if expected_mismatches <= best_mismatches:
+            best_start, best_mismatches, best_window = expected_start, expected_mismatches, expected_window
+
     return {
         "start": best_start,
         "end": best_start + primer_len,
@@ -66,7 +78,7 @@ def _best_match(primer: str, sequence: str) -> dict:
 
 
 def _find_secondary_matches(primer: str, sequence: str, primary_start: int, primary_end: int,
-                             identity_threshold: float = 80.0, max_results: int = 5) -> list:
+                             identity_threshold: float = 70.0, max_results: int = 5) -> list:
     """Scans the WHOLE sequence (not just around the intended binding site)
     for any other spot this primer could plausibly also bind - a real risk
     for off-target priming within the same gBlock. Returns positions other
@@ -122,7 +134,7 @@ def build_substitution_notes(original_primer: str, substitutions: dict) -> list:
 
 def align_primer_to_sequence(original_primer: str, sequence: str, primer_label: str,
                               primer_direction_note: str = "", substitutions: dict = None,
-                              is_reverse: bool = False) -> dict:
+                              is_reverse: bool = False, expected_start=None) -> dict:
     original_primer = original_primer.strip().upper()
     substitutions = substitutions or {}
 
@@ -133,7 +145,7 @@ def align_primer_to_sequence(original_primer: str, sequence: str, primer_label: 
     # primer's own original 5'->3' orientation, regardless of direction.
     display_primer = iupac.reverse_complement_iupac(original_primer) if is_reverse else original_primer
 
-    match = _best_match(display_primer, sequence)
+    match = _best_match(display_primer, sequence, expected_start)
 
     if not match["found"]:
         return {
@@ -184,14 +196,12 @@ def align_primers(primers: list, sequence: str) -> list:
         substitutions = primer.get("substitutions") or {}
 
         is_reverse = direction == "reverse"
-        note = (
-            "(shown as its reverse complement - that's the strand it binds on the designed sequence)"
-            if is_reverse else ""
-        )
+        note = ""  # (reverse primers are still aligned as their reverse complement; it's just not spelled out in the UI)
 
         result = align_primer_to_sequence(
             as_typed, sequence, label, primer_direction_note=note,
             substitutions=substitutions, is_reverse=is_reverse,
+            expected_start=primer.get("expected_start"),
         )
         result["direction"] = direction
         results.append(result)

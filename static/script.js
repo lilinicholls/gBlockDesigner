@@ -443,6 +443,7 @@ $("run-alignment").addEventListener("click", async () => {
           sequence: p.sequence,
           direction: p.direction,
           degenerate_substitutions: (currentDesign.degenerate_info || {})[p.name] || [],
+          expected_start: (primerSpans(currentDesign.segments).find((sp) => sp.type === "primer" && sp.label === p.name) || {}).start,
         })),
         probe: collectProbe(),
         sequence: currentDesign.sequence,
@@ -470,10 +471,39 @@ function padLabel(label) {
 }
 
 function renderAlignment(results) {
-  $("alignment-result").innerHTML = alignmentHtml(results);
+  const spans = currentDesign ? primerSpans(currentDesign.segments) : null;
+  $("alignment-result").innerHTML = alignmentHtml(results, { spans, suggest: separateGBlocksAdvice });
 }
 
-function alignmentHtml(results) {
+// Where every primer (and probe) actually sits in a designed sequence, as
+// {label, start, end} with 0-based, end-exclusive positions - the same
+// numbering the alignment results use.
+function primerSpans(segments, labelFor) {
+  const spans = [];
+  let pos = 0;
+  for (const seg of segments) {
+    if (seg.type === "primer" || seg.type === "probe") {
+      spans.push({ label: labelFor ? labelFor(seg) : seg.label, start: pos, end: pos + seg.length, type: seg.type });
+    }
+    pos += seg.length;
+  }
+  return spans;
+}
+
+// Other primers that a possible off-target site sits on top of.
+function overlappingSpans(spans, match, ownLabel) {
+  return spans.filter((sp) => sp.label !== ownLabel &&
+    Math.min(sp.end, match.end) - Math.max(sp.start, match.start) >= 8);
+}
+
+function separateGBlocksAdvice(result, otherLabels) {
+  return `<div class="status-line">Because the matching spot is another primer's sequence rather than the random sequence, ` +
+    `re-rolling the random DNA won't fix it. The only fix is to design ${escapeHtml(result.primer_label)} and ` +
+    `${otherLabels.map(escapeHtml).join(", ")} on different gBlocks.</div>`;
+}
+
+function alignmentHtml(results, opts = {}) {
+  const spans = opts.spans || null;
   const prefixSpaces = " ".repeat(ALIGN_LABEL_WIDTH + "  5'-".length);
 
   const blocks = results.map((r) => {
@@ -493,20 +523,36 @@ function alignmentHtml(results) {
       ? `<div class="degeneracy-note">${r.substitution_notes.map(escapeHtml).join("<br>")}</div>`
       : "";
 
-    const secondaryWarning = (r.secondary_matches && r.secondary_matches.length)
-      ? `<div class="secondary-match-warning">
+    let secondaryWarning = "";
+    if (r.secondary_matches && r.secondary_matches.length) {
+      const culprits = [];
+      const items = r.secondary_matches.map((m) => {
+        let why = "";
+        if (spans) {
+          const others = overlappingSpans(spans, m, r.primer_label);
+          if (others.length) {
+            others.forEach((o) => { if (!culprits.includes(o.label)) culprits.push(o.label); });
+            why = ` &mdash; this overlaps <strong>${others.map((o) => escapeHtml(o.label)).join(", ")}</strong>, so it's a match to another primer, not to the random sequence. Re-rolling the random sequence will <strong>not</strong> fix this`;
+          } else {
+            why = " &mdash; this falls in the random sequence, not in another primer, so re-designing (which re-rolls the random sequence) could remove it";
+          }
+        }
+        return `<li>Position ${m.start}&ndash;${m.end}: ${m.percent_identity}% identity (${m.mismatches} mismatch${m.mismatches === 1 ? "" : "es"})${why}</li>`;
+      }).join("");
+      const advice = culprits.length && opts.suggest ? opts.suggest(r, culprits) : "";
+      secondaryWarning = `<div class="secondary-match-warning">
           <strong>&#9888; Possible off-target binding:</strong> this primer could also plausibly bind elsewhere in the gBlock, not just where it's meant to:
-          <ul class="detail-list">${r.secondary_matches.map((m) =>
-            `<li>Position ${m.start}&ndash;${m.end}: ${m.percent_identity}% identity (${m.mismatches} mismatch${m.mismatches === 1 ? "" : "es"})</li>`).join("")}</ul>
-        </div>`
-      : "";
+          <ul class="detail-list">${items}</ul>
+          ${advice}
+        </div>`;
+    }
 
     return `
       <div class="hit-row">
         <strong>${escapeHtml(r.primer_label)}</strong>
         <span class="tag tag-${r.direction}">${r.direction}</span>
         ${statusBadge}
-        <div class="status-line">${r.percent_identity}% identity${r.primer_direction_note ? " &mdash; " + escapeHtml(r.primer_direction_note) : ""}</div>
+        <div class="status-line">${r.percent_identity}% identity</div>
         <pre class="align-block">${seqLine}
 ${barLine}
 ${primerLine}</pre>
