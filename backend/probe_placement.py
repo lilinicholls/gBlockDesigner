@@ -124,3 +124,44 @@ def insert_probe(design: dict, forward_name: str, reverse_name: str,
     new_design["probe_offset_used"] = offset
 
     return new_design
+
+
+def insert_probe_flexible(design: dict, forward_name: str, reverse_name: str,
+                          probe_sequence: str, start_position=None) -> dict:
+    """Like insert_probe, but when no start position is given and the
+    centred spot can't be used (e.g. another pair's primers are nested
+    right there), it tries the nearest spots on either side of the centre
+    until one works, instead of giving up. An explicit start position is
+    always respected exactly."""
+    if start_position is not None:
+        return insert_probe(design, forward_name, reverse_name, probe_sequence, start_position)
+
+    try:
+        return insert_probe(design, forward_name, reverse_name, probe_sequence, None)
+    except ValueError as first_error:
+        centre_error = first_error
+
+    segments = design["segments"]
+    fwd = next((s for s in segments if s["type"] == "primer" and s["label"] == forward_name), None)
+    if fwd is None:
+        raise centre_error
+    region_length = 0
+    seen_fwd = False
+    for seg in segments:
+        if seg is fwd:
+            seen_fwd = True
+            continue
+        if seen_fwd:
+            if seg["type"] == "primer" and seg["label"] == reverse_name:
+                break
+            region_length += seg["length"]
+    probe_length = len(probe_sequence.strip())
+    centre = max((region_length - probe_length) // 2, 0)
+    for distance in range(1, region_length + 1):
+        for offset in (centre - distance, centre + distance):
+            if 0 <= offset <= region_length - probe_length:
+                try:
+                    return insert_probe(design, forward_name, reverse_name, probe_sequence, offset)
+                except ValueError:
+                    continue
+    raise centre_error

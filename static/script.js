@@ -470,6 +470,10 @@ function padLabel(label) {
 }
 
 function renderAlignment(results) {
+  $("alignment-result").innerHTML = alignmentHtml(results);
+}
+
+function alignmentHtml(results) {
   const prefixSpaces = " ".repeat(ALIGN_LABEL_WIDTH + "  5'-".length);
 
   const blocks = results.map((r) => {
@@ -511,7 +515,7 @@ ${primerLine}</pre>
       </div>`;
   }).join("");
 
-  $("alignment-result").innerHTML = blocks;
+  return blocks;
 }
 
 // ---------- Step 3: BLAST ----------
@@ -580,9 +584,12 @@ function pollBlast(jobId) {
 }
 
 function renderBlast(job) {
+  $("blast-result").innerHTML = blastHtml(job);
+}
+
+function blastHtml(job) {
   if (job.no_significant_hits) {
-    $("blast-result").innerHTML = `<span class="badge ok">No significant hits</span> Your designed sequence does not appear to match any existing known sequence in NCBI's database.`;
-    return;
+    return `<span class="badge ok">No significant hits</span> Your designed sequence does not appear to match any existing known sequence in NCBI's database.`;
   }
   const rows = job.hits.map((h) => `
     <div class="hit-row">
@@ -596,7 +603,7 @@ function renderBlast(job) {
   const countLabel = job.total_hits_found > job.hits.length
     ? `${job.total_hits_found} hit(s) found &mdash; showing top ${job.hits.length}`
     : `${job.total_hits_found} hit(s) found`;
-  $("blast-result").innerHTML = `<span class="badge warn">${countLabel}</span>${rows}`;
+  return `<span class="badge warn">${countLabel}</span>${rows}`;
 }
 
 // ---------- Step 4: Local complexity check ----------
@@ -627,6 +634,18 @@ $("run-complexity").addEventListener("click", async () => {
 });
 
 function renderComplexity(data) {
+  $("complexity-result").innerHTML = complexityHtml(data);
+
+  const fixBtn = $("fix-issues");
+  if (data.any_flagged) {
+    show(fixBtn);
+  } else {
+    hide(fixBtn);
+    hide($("fix-status"));
+  }
+}
+
+function complexityHtml(data) {
   const overallBadge = data.any_flagged
     ? '<span class="badge warn">Some things worth a look</span>'
     : '<span class="badge ok">Nothing flagged</span>';
@@ -655,15 +674,7 @@ function renderComplexity(data) {
       ${details}</div>`;
   }).join("");
 
-  $("complexity-result").innerHTML = `${overallBadge}${items}`;
-
-  const fixBtn = $("fix-issues");
-  if (data.any_flagged) {
-    show(fixBtn);
-  } else {
-    hide(fixBtn);
-    hide($("fix-status"));
-  }
+  return `${overallBadge}${items}`;
 }
 
 // ---------- "Fix issues" ----------

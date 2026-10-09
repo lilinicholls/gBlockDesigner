@@ -2,7 +2,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -16,6 +16,7 @@ import refine  # noqa: E402
 import layout_solver  # noqa: E402
 import iupac  # noqa: E402
 import probe_placement  # noqa: E402
+import bulk_design  # noqa: E402
 
 app = Flask(
     __name__,
@@ -37,6 +38,7 @@ def index():
     asset_version = int(max(
         os.path.getmtime(os.path.join(static_dir, "script.js")),
         os.path.getmtime(os.path.join(static_dir, "style.css")),
+        os.path.getmtime(os.path.join(static_dir, "bulk.js")),
     ))
     return render_template("index.html", asset_version=asset_version)
 
@@ -431,6 +433,72 @@ def api_design_fix():
     result["design"]["gc_percent_source"] = gc_percent_source
     result["design"]["degenerate_info"] = degenerate_info
 
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------- bulk
+
+@app.get("/bulk-template.csv")
+def bulk_template():
+    return Response(
+        bulk_design.template_csv(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=gblock_bulk_template.csv"},
+    )
+
+
+@app.post("/api/bulk/parse")
+def api_bulk_parse():
+    """Reads and validates an uploaded CSV, so the page can list its pairs
+    (for the contingency rule dropdowns) before anything is designed."""
+    data = request.get_json(force=True)
+    try:
+        parsed = bulk_design.parse_csv(data.get("csv"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    pairs = parsed["pairs"]
+    return jsonify({
+        "pairs": [
+            {k: p[k] for k in ("id", "forward_name", "reverse_name", "fragment_length")}
+            for p in pairs
+        ],
+        "primer_count": len(parsed["primers"]),
+        "probe_count": sum(1 for p in pairs if p["probe"]),
+        "linked_groups": [
+            [pairs[i]["id"] for i in group]
+            for group in bulk_design.link_groups(pairs) if len(group) > 1
+        ],
+    })
+
+
+@app.post("/api/bulk/redesign-block")
+def api_bulk_redesign_block():
+    data = request.get_json(force=True)
+    try:
+        block = bulk_design.redesign_block(
+            data.get("csv"), data.get("mode"), data.get("name"), data.get("pair_ids"),
+            flank_length=data.get("flank_length", 30), gc_percent=data.get("gc_percent", 50),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(block)
+
+
+@app.post("/api/bulk/design")
+def api_bulk_design():
+    data = request.get_json(force=True)
+    try:
+        result = bulk_design.design_bulk(
+            data.get("csv"),
+            data.get("mode"),
+            num_blocks=data.get("num_blocks"),
+            rules=data.get("rules"),
+            flank_length=data.get("flank_length", 30),
+            gc_percent=data.get("gc_percent", 50),
+            avoid_flags=bool(data.get("avoid_flags", True)),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(result)
 
 

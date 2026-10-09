@@ -111,7 +111,14 @@ def find_clean_design(primers: list, gaps: list, gc_percent: float, flank_length
                     gap_i += 1
 
         if probe_config:
-            design = probe_placement.insert_probe(design, **probe_config)
+            # One probe config (a dict), or several (a list - used by bulk
+            # design, where a gBlock can carry one probe per pair).
+            configs = probe_config if isinstance(probe_config, list) else [probe_config]
+            for config in configs:
+                config = dict(config)
+                flexible = config.pop("flexible", False)
+                insert = probe_placement.insert_probe_flexible if flexible else probe_placement.insert_probe
+                design = insert(design, **config)
 
         report = complexity_check.run_local_complexity_check(design["sequence"])
         flag_count = _count_flags(report)

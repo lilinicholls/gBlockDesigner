@@ -121,7 +121,7 @@ def _block_span(block: dict, primer_lengths: dict) -> int:
     return sum(primer_lengths[n] for n in block["primer_order"]) + sum(block["gaps"])
 
 
-def solve_layout(primers: list, pairs: list) -> tuple:
+def solve_layout(primers: list, pairs: list, allow_nesting: bool = True) -> tuple:
     """
     primers: list of {"name": str, "sequence": str, "direction": "forward"|"reverse"}
     pairs: list of (forward_name, reverse_name, fragment_length) tuples
@@ -149,12 +149,15 @@ def solve_layout(primers: list, pairs: list) -> tuple:
 
     # Largest blocks first, so smaller ones get a chance to nest into them;
     # smallest-sufficient-gap preferred at each step (see _try_nest).
-    blocks.sort(key=lambda b: -_block_span(b, primer_lengths))
+    # With nesting switched off, groups keep the order they came in and are
+    # simply placed one after another.
+    if allow_nesting:
+        blocks.sort(key=lambda b: -_block_span(b, primer_lengths))
 
     top_level = []
     for block in blocks:
         placed = False
-        for host in top_level:
+        for host in (top_level if allow_nesting else []):
             guest_span = _block_span(block, primer_lengths)
             needed = guest_span + 2 * MIN_NEST_GAP
             candidates = [(i, g) for i, g in enumerate(host["gaps"]) if g >= needed]

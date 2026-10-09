@@ -15,6 +15,12 @@
   </header>
 
   <main>
+    <div class="mode-switch" role="tablist" aria-label="Design mode">
+      <button type="button" class="mode-tab active" id="tab-single" role="tab" aria-selected="true">Single gBlock</button>
+      <button type="button" class="mode-tab" id="tab-bulk" role="tab" aria-selected="false">Bulk upload (CSV)</button>
+    </div>
+
+    <div id="single-mode">
     <section class="panel" id="design-panel">
       <h2>1. Design</h2>
       <form id="design-form">
@@ -129,9 +135,68 @@
       </div>
     </section>
 
+    </div><!-- /single-mode -->
+
+    <div id="bulk-mode" class="hidden">
+      <section class="panel" id="bulk-panel">
+        <h2>Bulk design from a CSV</h2>
+        <p class="hint">Design many primer pairs at once. Upload a CSV with one row per primer pair, then choose how the pairs should be arranged into gBlocks.
+          <a href="/bulk-template.csv" download>Download the CSV template</a>.</p>
+
+        <label class="file-label">
+          CSV file
+          <input type="file" id="bulk-file" accept=".csv,text/csv,text/plain">
+        </label>
+        <div id="bulk-parse-status" class="status-line hidden"></div>
+
+        <div id="bulk-options" class="hidden">
+          <div id="bulk-summary" class="reminder-box"></div>
+
+          <h3 class="subsection-title">Layout</h3>
+          <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="bulk-layout" value="single"> <span><strong>All on one gBlock</strong> &mdash; every pair end to end, one after another.</span></label>
+            <label class="radio-label"><input type="radio" name="bulk-layout" value="nested" checked> <span><strong>All on one gBlock, nested</strong> &mdash; pairs are packed inside each other's gaps wherever they fit, keeping the gBlock as short as possible.</span></label>
+            <label class="radio-label"><input type="radio" name="bulk-layout" value="split"> <span><strong>Split across several gBlocks</strong> &mdash; divide the pairs over this many gBlocks:</span></label>
+          </div>
+          <div id="bulk-split-field" class="hidden">
+            <label>
+              Number of gBlocks
+              <input type="number" id="bulk-num-blocks" min="1" value="2">
+            </label>
+          </div>
+
+          <h3 class="subsection-title">Rules (optional)</h3>
+          <p class="hint">Control which pairs may share a gBlock. Pairs that share a primer always stay together. Rules about keeping pairs apart only apply when splitting across several gBlocks.</p>
+          <div id="bulk-rules"></div>
+          <button type="button" id="bulk-add-rule" class="tertiary-button">+ Add a rule</button>
+
+          <h3 class="subsection-title">Sequence settings</h3>
+          <div class="bulk-settings">
+            <label>
+              Flank length (bp)
+              <input type="number" id="bulk-flank" value="30" min="0">
+            </label>
+            <label>
+              Target GC content (%)
+              <input type="number" id="bulk-gc" value="50" min="0" max="100" step="0.1">
+            </label>
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="bulk-avoid-flags" checked>
+            Re-roll the random sections to avoid manufacturing complexity flags
+          </label>
+
+          <button type="button" id="bulk-design-btn">Design gBlocks</button>
+        </div>
+
+        <div id="bulk-result" class="result hidden"></div>
+      </section>
+    </div>
+
     <button type="button" class="reset-button reset-button-bottom" id="reset-bottom">Design new gBlock</button>
   </main>
 
   <script src="{{ url_for('static', filename='script.js') }}?v={{ asset_version }}"></script>
+  <script src="{{ url_for('static', filename='bulk.js') }}?v={{ asset_version }}"></script>
 </body>
 </html>
