@@ -617,7 +617,7 @@ function pollBlast(jobId) {
             waiting_for_slot: "Waiting for a free BLAST slot (this app limits how many searches run at once, to stay in NCBI's good graces)...",
             running: "Running on NCBI's servers...",
           };
-          $("blast-result").innerHTML = `<div class="status-line">${statusLabels[job.status] || `Status: ${job.status}...`}</div>`;
+          $("blast-result").innerHTML = `<div class="status-line">${statusLabels[job.status] || `Status: ${job.status}...`}${job.rid ? ` <small>(NCBI search ID ${escapeHtml(job.rid)})</small>` : ""}</div>`;
         }
       } catch (err) {
         clearInterval(interval);

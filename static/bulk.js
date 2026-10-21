@@ -432,7 +432,7 @@
           setStepItem("blast", i, `<span class="badge error">BLAST error</span> ${escapeHtml(job.error)}`);
           return;
         }
-        setStepItem("blast", i, `<div class="status-line">${BLAST_STATUS[job.status] || `Status: ${escapeHtml(job.status)}...`}</div>`);
+        setStepItem("blast", i, `<div class="status-line">${BLAST_STATUS[job.status] || `Status: ${escapeHtml(job.status)}...`}${job.rid ? ` <small>(NCBI search ID ${escapeHtml(job.rid)})</small>` : ""}</div>`);
       }
     } catch (err) {
       if (stillCurrent()) setStepItem("blast", i, errorHtml(err.message));

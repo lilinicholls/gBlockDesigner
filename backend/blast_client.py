@@ -41,7 +41,7 @@ _JOBS_LOCK = threading.Lock()
 # the app's shared identity rate-limited or blocked by NCBI for everyone.
 # This caps how many searches run at the same time; anything beyond that
 # waits its turn rather than firing off unboundedly.
-MAX_CONCURRENT_BLAST_JOBS = 2
+MAX_CONCURRENT_BLAST_JOBS = 3
 _BLAST_SEMAPHORE = threading.Semaphore(MAX_CONCURRENT_BLAST_JOBS)
 
 # How long a finished job's result is kept around before being cleaned up,
@@ -89,7 +89,7 @@ def _http(url, data=None):
         return resp.read().decode("utf-8", errors="replace")
 
 
-def _fast_blast_xml(sequence: str, program: str, database: str) -> str:
+def _fast_blast_xml(sequence: str, program: str, database: str, job_id: str = None) -> str:
     """Submits the search and checks on it every 10 seconds, returning the
     XML result as soon as NCBI has it. (Biopython's built-in qblast only
     checks once a MINUTE after the first 20s, so a search that finished
@@ -109,6 +109,8 @@ def _fast_blast_xml(sequence: str, program: str, database: str) -> str:
     if not rid:
         raise RuntimeError("NCBI did not return a search ID")
     rid = rid.group(1)
+    if job_id:
+        _set_job(job_id, rid=rid, database=database)
     rtoe = re.search(r"RTOE = (\d+)", page)
     time.sleep(min(int(rtoe.group(1)) if rtoe else POLL_SECONDS, POLL_SECONDS))
 
@@ -134,7 +136,7 @@ def _run_blast(job_id: str, sequence: str, program: str, database: str):
 
             database = DATABASE_ALIASES.get(database, database)
             try:
-                xml = _fast_blast_xml(sequence, program, database)
+                xml = _fast_blast_xml(sequence, program, database, job_id)
                 record = NCBIXML.read(StringIO(xml))
             except Exception:  # noqa: BLE001 - fall back to Biopython's slower but proven route
                 result_handle = NCBIWWW.qblast(
