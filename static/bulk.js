@@ -152,6 +152,7 @@
           rules,
           flank_length: $("bulk-flank").value,
           gc_percent: $("bulk-gc").value,
+          target_sequence: $("bulk-use-target").checked ? $("bulk-target-sequence").value.trim() : "",
           avoid_flags: $("bulk-avoid-flags").checked,
         }),
       });
@@ -161,7 +162,7 @@
       lastSettings = {
         mode: selectedLayout(),
         flank_length: $("bulk-flank").value,
-        gc_percent: $("bulk-gc").value,
+        gc_percent: data.gc_percent, // the GC% actually used (from the target sequence, if one was pasted)
       };
       renderResult(data);
     } catch (err) {
@@ -170,6 +171,20 @@
       btn.disabled = false;
       btn.textContent = "Design gBlocks";
     }
+  });
+
+  // Target-sequence GC mode, same as the single-gBlock form.
+  $("bulk-use-target").addEventListener("change", (e) => {
+    if (e.target.checked) { hide($("bulk-manual-gc-field")); show($("bulk-target-field")); }
+    else { show($("bulk-manual-gc-field")); hide($("bulk-target-field")); }
+  });
+  $("bulk-target-sequence").addEventListener("input", () => {
+    const cleaned = $("bulk-target-sequence").value.trim().toUpperCase().replace(/[^ACGT]/g, "");
+    const preview = $("bulk-target-gc-preview");
+    if (!cleaned.length) { preview.textContent = ""; return; }
+    const gcCount = (cleaned.match(/[GC]/g) || []).length;
+    const pct = Math.round((gcCount / cleaned.length) * 10000) / 100;
+    preview.textContent = `Detected GC content: ${pct}% (this will be used as the target for every gBlock)`;
   });
 
   function renderError(message) {
@@ -236,7 +251,7 @@
     },
     blast: {
       title: "NCBI BLAST",
-      hint: "Searches NCBI's public database for existing sequences that match each designed gBlock. NCBI is searched two gBlocks at a time, so a large batch can take several minutes.",
+      hint: "Searches NCBI's public database for existing sequences that match each designed gBlock. NCBI is searched a few gBlocks at a time, so a large batch can take several minutes.",
       button: "Run BLAST on all gBlocks",
       busy: "Running...",
     },
@@ -249,12 +264,20 @@
   };
   let stepResults = { align: {}, blast: {}, idt: {} };
 
+  // Links that open each gBlock on NCBI's own BLAST page, ready to search.
+  function ncbiLinksHtml() {
+    const links = lastResult.blocks.map((b) => b.error ? "" :
+      `<a href="${ncbiBlastUrl(b.sequence)}" target="_blank" rel="noopener noreferrer">${escapeHtml(b.name)}</a>`).filter(Boolean);
+    return `<p class="hint">Taking too long? Open a gBlock on NCBI's own BLAST page, with its sequence already filled in (press "BLAST" there): ${links.join(" &middot; ")}</p>`;
+  }
+
   function stepSectionHtml(step) {
     const t = STEPS[step];
     return `<div class="bulk-step" id="bulk-step-${step}">
       <h3 class="subsection-title">${t.title}</h3>
       <p class="hint">${t.hint}</p>
       <button type="button" class="step-run" data-step="${step}">${t.button}</button>
+      ${step === "blast" ? ncbiLinksHtml() : ""}
       <div class="bulk-step-results hidden" id="bulk-results-${step}"></div>
     </div>`;
   }
@@ -299,6 +322,7 @@
         ${data.blocks.length} gBlock${data.blocks.length === 1 ? "" : "s"} from ${data.pair_count} primer pair${data.pair_count === 1 ? "" : "s"}.
         ${designed ? '<button type="button" class="tertiary-button" id="bulk-download">Download CSV</button>' : ""}
       </div>
+      ${data.gc_percent_source === "target_sequence" ? `<p class="hint">Designed to the GC content of your target sequence (${data.gc_percent}%).</p>` : ""}
       ${notes}
       <div id="bulk-blocks">${data.blocks.map(renderBlock).join("")}</div>
       ${designed ? ["align", "blast", "idt"].map(stepSectionHtml).join("") : ""}
@@ -549,11 +573,16 @@
 
   function downloadCsv() {
     if (!lastResult) return;
-    const lines = [["Name", "Sequence", "Length (bp)", "GC (%)", "Pairs", "Primers"].join(",")];
-    lastResult.blocks.filter((b) => !b.error).forEach((b) => {
+    const lines = [["Name", "Sequence", "Length (bp)", "GC (%)", "Pairs", "Primer names", "Primer sequences (5'->3')", "Primer directions", "Probe sequences"].join(",")];
+    lastResult.blocks.forEach((b) => {
+      if (b.error) return;
       lines.push([
         b.name, b.sequence, b.length, b.overall_gc_percent,
-        b.pair_ids.join(" "), b.primer_names.join(" "),
+        b.pair_ids.join("; "),
+        b.primers.map((p) => p.name).join("; "),
+        b.primers.map((p) => p.sequence).join("; "),
+        b.primers.map((p) => p.direction).join("; "),
+        (b.probes || []).map((p) => `${p.pair_id}: ${p.sequence}`).join("; "),
       ].map(csvField).join(","));
     });
     const blob = new Blob([lines.join("\r\n") + "\r\n"], { type: "text/csv" });

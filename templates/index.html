@@ -117,6 +117,7 @@
       <h2>3. NCBI BLAST</h2>
       <p class="hint">Searches <a href="https://blast.ncbi.nlm.nih.gov/" target="_blank" rel="noopener noreferrer">NCBI's public database</a> for existing sequences that match your designed fragment. This can take 30 seconds to several minutes.</p>
       <button id="run-blast">Run BLAST</button>
+      <p class="hint">Taking too long? <a id="open-ncbi-blast" href="https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&amp;PAGE_TYPE=BlastSearch&amp;LINK_LOC=blasthome" target="_blank" rel="noopener noreferrer">Open this sequence in NCBI's own BLAST page</a>, with it already filled in. Press "BLAST" there.</p>
       <div id="blast-result" class="result hidden"></div>
     </section>
 
@@ -176,9 +177,24 @@
               Flank length (bp)
               <input type="number" id="bulk-flank" value="30" min="0">
             </label>
+          </div>
+          <div class="gc-mode-toggle">
+            <label class="checkbox-label">
+              <input type="checkbox" id="bulk-use-target">
+              I have a specific target sequence
+            </label>
+          </div>
+          <div id="bulk-manual-gc-field">
             <label>
               Target GC content (%)
               <input type="number" id="bulk-gc" value="50" min="0" max="100" step="0.1">
+            </label>
+          </div>
+          <div id="bulk-target-field" class="hidden">
+            <label>
+              Paste your target sequence
+              <textarea id="bulk-target-sequence" rows="4" placeholder="Paste the sequence your primers were designed against"></textarea>
+              <span class="field-note" id="bulk-target-gc-preview"></span>
             </label>
           </div>
           <label class="checkbox-label">

@@ -1,5 +1,12 @@
 let currentDesign = null;
 
+// A link to NCBI's own BLAST page with the sequence already filled in. Their
+// website is often much quicker than searching through this app, because
+// the app has to go through NCBI's automated-access queue.
+function ncbiBlastUrl(sequence) {
+  return "https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&LINK_LOC=blasthome&QUERY=" + encodeURIComponent(sequence);
+}
+
 const $ = (id) => document.getElementById(id);
 
 function show(el) { el.classList.remove("hidden"); }
@@ -356,6 +363,7 @@ async function submitDesign(endpoint) {
     renderDesign(currentDesign);
     show($("design-result"));
     show($("alignment-panel"));
+    $("open-ncbi-blast").href = ncbiBlastUrl(currentDesign.sequence);
     show($("blast-panel"));
     show($("idt-panel"));
 

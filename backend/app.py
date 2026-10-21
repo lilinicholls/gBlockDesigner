@@ -490,17 +490,22 @@ def api_bulk_redesign_block():
 def api_bulk_design():
     data = request.get_json(force=True)
     try:
+        # Same rule as the single-gBlock page: a pasted target sequence's own
+        # GC% is used if there is one, otherwise the GC% typed in.
+        gc_percent, gc_percent_source = _resolve_gc_percent(data)
         result = bulk_design.design_bulk(
             data.get("csv"),
             data.get("mode"),
             num_blocks=data.get("num_blocks"),
             rules=data.get("rules"),
             flank_length=data.get("flank_length", 30),
-            gc_percent=data.get("gc_percent", 50),
+            gc_percent=gc_percent,
             avoid_flags=bool(data.get("avoid_flags", True)),
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    result["gc_percent"] = gc_percent
+    result["gc_percent_source"] = gc_percent_source
     return jsonify(result)
 
 

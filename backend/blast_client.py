@@ -50,7 +50,7 @@ JOB_RETENTION_SECONDS = 60 * 60
 
 BLAST_URL = "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi"
 POLL_SECONDS = 10          # NCBI asks for no more than one status check per 10s per search
-MAX_WAIT_SECONDS = 15 * 60  # give up (with a clear message) rather than spin forever
+MAX_WAIT_SECONDS = 6 * 60   # give up (with a clear message) rather than spin forever
 
 # NCBI's full "nt" is enormous and slow to search; "core_nt" is their
 # faster, non-redundant default for the website and returns the same
@@ -81,6 +81,11 @@ def _cleanup_old_jobs():
         ]
         for jid in stale:
             del _JOBS[jid]
+
+
+class NCBIWaitError(RuntimeError):
+    """NCBI accepted the search but didn't finish it (too slow, or it failed).
+    Raised on purpose so we do NOT start a second search as a "fallback"."""
 
 
 def _http(url, data=None):
@@ -122,10 +127,10 @@ def _fast_blast_xml(sequence: str, program: str, database: str, job_id: str = No
         if status == "READY":
             return _http(f"{BLAST_URL}?CMD=Get&FORMAT_TYPE=XML&RID={rid}")
         if status in ("FAILED", "UNKNOWN"):
-            raise RuntimeError(f"NCBI reported the search as {status.lower()}")
+            raise NCBIWaitError(f"NCBI reported the search as {status.lower()}.")
         time.sleep(POLL_SECONDS)
         waited += POLL_SECONDS
-    raise RuntimeError("NCBI took too long to answer (over 15 minutes). Try again later.")
+    raise NCBIWaitError("NCBI is taking too long to answer (over 6 minutes). Use the \"NCBI's own BLAST page\" link instead, or try again later.")
 
 
 def _run_blast(job_id: str, sequence: str, program: str, database: str):
@@ -138,7 +143,9 @@ def _run_blast(job_id: str, sequence: str, program: str, database: str):
             try:
                 xml = _fast_blast_xml(sequence, program, database, job_id)
                 record = NCBIXML.read(StringIO(xml))
-            except Exception:  # noqa: BLE001 - fall back to Biopython's slower but proven route
+            except NCBIWaitError:
+                raise  # the search was accepted but is slow or failed: don't start another one
+            except Exception:  # noqa: BLE001 - submission itself failed: fall back to Biopython's route
                 result_handle = NCBIWWW.qblast(
                     program, database, sequence, hitlist_size=MAX_HITS_TO_FETCH,
                     alignments=MAX_HITS_TO_FETCH, descriptions=MAX_HITS_TO_FETCH,
