@@ -119,6 +119,8 @@ main {
   font-size: 0.88rem;
   margin-top: -0.4rem;
 }
+/* A hint straight after a button needs normal spacing, not the tuck-up used under headings. */
+button + .hint { margin-top: 0.8rem; }
 
 form { display: flex; flex-direction: column; gap: 0.9rem; }
 
