@@ -386,7 +386,7 @@ def api_blast_start():
         return jsonify({"error": "sequence is required"}), 400
 
     program = data.get("program", "blastn")
-    database = data.get("database", "nt")
+    database = data.get("database", "core_nt")
     job_id = blast_client.start_blast_job(sequence, program, database)
     return jsonify({"job_id": job_id, "status": "queued"})
 

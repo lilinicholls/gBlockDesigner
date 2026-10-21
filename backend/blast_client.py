@@ -16,8 +16,13 @@ that powers https://blast.ncbi.nlm.nih.gov/). This is a free service, but:
 """
 
 import os
+import re
 import threading
+import time
+import urllib.parse
+import urllib.request
 import uuid
+from io import StringIO
 from datetime import datetime, timezone
 
 from Bio.Blast import NCBIWWW, NCBIXML
@@ -42,6 +47,15 @@ _BLAST_SEMAPHORE = threading.Semaphore(MAX_CONCURRENT_BLAST_JOBS)
 # How long a finished job's result is kept around before being cleaned up,
 # so the in-memory store doesn't grow forever on a long-running deployment.
 JOB_RETENTION_SECONDS = 60 * 60
+
+BLAST_URL = "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi"
+POLL_SECONDS = 10          # NCBI asks for no more than one status check per 10s per search
+MAX_WAIT_SECONDS = 15 * 60  # give up (with a clear message) rather than spin forever
+
+# NCBI's full "nt" is enormous and slow to search; "core_nt" is their
+# faster, non-redundant default for the website and returns the same
+# kind of hits for this use.
+DATABASE_ALIASES = {"nt": "core_nt"}
 
 MAX_HITS_TO_FETCH = 50   # ask NCBI for more, so we can report an accurate total
 MAX_HITS_TO_DISPLAY = 10  # but only show the best 10 in the app
@@ -69,15 +83,67 @@ def _cleanup_old_jobs():
             del _JOBS[jid]
 
 
+def _http(url, data=None):
+    req = urllib.request.Request(url, data=data, headers={"User-Agent": "gBlockDesigner"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def _fast_blast_xml(sequence: str, program: str, database: str) -> str:
+    """Submits the search and checks on it every 10 seconds, returning the
+    XML result as soon as NCBI has it. (Biopython's built-in qblast only
+    checks once a MINUTE after the first 20s, so a search that finished
+    after 25s would not be noticed until ~80s; it also uses the slower
+    non-megablast algorithm and asks for 500 alignments by default.)"""
+    params = {
+        "CMD": "Put", "PROGRAM": program, "DATABASE": database, "QUERY": sequence,
+        "HITLIST_SIZE": MAX_HITS_TO_FETCH, "ALIGNMENTS": MAX_HITS_TO_FETCH,
+        "DESCRIPTIONS": MAX_HITS_TO_FETCH, "FORMAT_TYPE": "XML", "TOOL": "gBlockDesigner",
+    }
+    if program == "blastn":
+        params["MEGABLAST"] = "on"
+    if os.environ.get("NCBI_EMAIL"):
+        params["EMAIL"] = os.environ["NCBI_EMAIL"]
+    page = _http(BLAST_URL, urllib.parse.urlencode(params).encode())
+    rid = re.search(r"RID = (\S+)", page)
+    if not rid:
+        raise RuntimeError("NCBI did not return a search ID")
+    rid = rid.group(1)
+    rtoe = re.search(r"RTOE = (\d+)", page)
+    time.sleep(min(int(rtoe.group(1)) if rtoe else POLL_SECONDS, POLL_SECONDS))
+
+    waited = 0
+    while waited < MAX_WAIT_SECONDS:
+        info = _http(f"{BLAST_URL}?CMD=Get&FORMAT_OBJECT=SearchInfo&RID={rid}")
+        status = re.search(r"Status=(\w+)", info)
+        status = status.group(1) if status else "UNKNOWN"
+        if status == "READY":
+            return _http(f"{BLAST_URL}?CMD=Get&FORMAT_TYPE=XML&RID={rid}")
+        if status in ("FAILED", "UNKNOWN"):
+            raise RuntimeError(f"NCBI reported the search as {status.lower()}")
+        time.sleep(POLL_SECONDS)
+        waited += POLL_SECONDS
+    raise RuntimeError("NCBI took too long to answer (over 15 minutes). Try again later.")
+
+
 def _run_blast(job_id: str, sequence: str, program: str, database: str):
     _set_job(job_id, status="waiting_for_slot")
     with _BLAST_SEMAPHORE:
         try:
             _set_job(job_id, status="running", started_at=datetime.now(timezone.utc).isoformat())
 
-            result_handle = NCBIWWW.qblast(program, database, sequence, hitlist_size=MAX_HITS_TO_FETCH)
-            record = NCBIXML.read(result_handle)
-            result_handle.close()
+            database = DATABASE_ALIASES.get(database, database)
+            try:
+                xml = _fast_blast_xml(sequence, program, database)
+                record = NCBIXML.read(StringIO(xml))
+            except Exception:  # noqa: BLE001 - fall back to Biopython's slower but proven route
+                result_handle = NCBIWWW.qblast(
+                    program, database, sequence, hitlist_size=MAX_HITS_TO_FETCH,
+                    alignments=MAX_HITS_TO_FETCH, descriptions=MAX_HITS_TO_FETCH,
+                    megablast=True if program == "blastn" else None,
+                )
+                record = NCBIXML.read(result_handle)
+                result_handle.close()
 
             query_length = len(sequence)
             hits = []
